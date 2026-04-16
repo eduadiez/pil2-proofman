@@ -6,6 +6,7 @@
 #include <gmp.h>
 #include <iostream>
 #include <cassert>
+#include <cstdlib>
 
 #define Fr_N64 4
 #define Fr_SHORT 0x00000000
@@ -71,190 +72,64 @@ extern "C" int Fr_rawIsZero(const FrRawElement pRawB);
 extern "C" void Fr_fail();
 
 #else
-// Mock implementations for macOS builds
 
 static FrElement Fr_q;
 static FrElement Fr_R3;
 static FrRawElement Fr_rawq;
 static FrRawElement Fr_rawR3;
 
-inline void Fr_copy(PFrElement r, PFrElement a){
-    std::cerr << "Fr_copy() not implemented for macOS." << std::endl;
-    assert(false);
-}
-inline void Fr_copyn(PFrElement r, PFrElement a, int n){
-    std::cerr << "Fr_copyn() not implemented for macOS." << std::endl;
-    assert(false);
-}
-inline void Fr_add(PFrElement r, PFrElement a, PFrElement b){
-    std::cerr << "Fr_add() not implemented for macOS." << std::endl;
-    assert(false);
-}
-inline void Fr_sub(PFrElement r, PFrElement a, PFrElement b){
-    std::cerr << "Fr_sub() not implemented for macOS." << std::endl;
-    assert(false);
-}
-inline void Fr_neg(PFrElement r, PFrElement a){
-    std::cerr << "Fr_neg() not implemented for macOS." << std::endl;
-    assert(false);
-}
-inline void Fr_mul(PFrElement r, PFrElement a, PFrElement b){
-    std::cerr << "Fr_mul() not implemented for macOS." << std::endl;
-    assert(false);
-}
-inline void Fr_square(PFrElement r, PFrElement a){
-    std::cerr << "Fr_square() not implemented for macOS." << std::endl;
-    assert(false);
-}
-inline void Fr_band(PFrElement r, PFrElement a, PFrElement b){
-    std::cerr << "Fr_band() not implemented for macOS." << std::endl;
-    assert(false);
-}
-inline void Fr_bor(PFrElement r, PFrElement a, PFrElement b){
-    std::cerr << "Fr_bor() not implemented for macOS." << std::endl;
-    assert(false);
-}
-inline void Fr_bxor(PFrElement r, PFrElement a, PFrElement b){
-    std::cerr << "Fr_bxor() not implemented for macOS." << std::endl;
-    assert(false);
-}
-inline void Fr_bnot(PFrElement r, PFrElement a){
-    std::cerr << "Fr_bnot() not implemented for macOS." << std::endl;
-    assert(false);
-}
-inline void Fr_shl(PFrElement r, PFrElement a, PFrElement b){
-    std::cerr << "Fr_shl() not implemented for macOS." << std::endl;
-    assert(false);
-}
-inline void Fr_shr(PFrElement r, PFrElement a, PFrElement b){
-    std::cerr << "Fr_shr() not implemented for macOS." << std::endl;
-    assert(false);
-}
-inline void Fr_eq(PFrElement r, PFrElement a, PFrElement b){
-    std::cerr << "Fr_eq() not implemented for macOS." << std::endl;
-    assert(false);
-}
-inline void Fr_neq(PFrElement r, PFrElement a, PFrElement b){
-    std::cerr << "Fr_neq() not implemented for macOS." << std::endl;
-    assert(false);
-}
-inline void Fr_lt(PFrElement r, PFrElement a, PFrElement b){
-    std::cerr << "Fr_lt() not implemented for macOS." << std::endl;
-    assert(false);
-}
-inline void Fr_gt(PFrElement r, PFrElement a, PFrElement b){
-    std::cerr << "Fr_gt() not implemented for macOS." << std::endl;
-    assert(false);
-}
-inline void Fr_leq(PFrElement r, PFrElement a, PFrElement b){
-    std::cerr << "Fr_leq() not implemented for macOS." << std::endl;
-    assert(false);
-}
-inline void Fr_geq(PFrElement r, PFrElement a, PFrElement b){
-    std::cerr << "Fr_geq() not implemented for macOS." << std::endl;
-    assert(false);
-}
-inline void Fr_land(PFrElement r, PFrElement a, PFrElement b){
-    std::cerr << "Fr_land() not implemented for macOS." << std::endl;
-    assert(false);
-}
-inline void Fr_lor(PFrElement r, PFrElement a, PFrElement b){
-    std::cerr << "Fr_lor() not implemented for macOS." << std::endl;
-    assert(false);
-}
-inline void Fr_lnot(PFrElement r, PFrElement a){
-    std::cerr << "Fr_lnot() not implemented for macOS." << std::endl;
-    assert(false);
-}
-inline void Fr_toNormal(PFrElement r, PFrElement a){
-    std::cerr << "Fr_toNormal() not implemented for macOS." << std::endl;
-    assert(false);
-}
-inline void Fr_toLongNormal(PFrElement r, PFrElement a){
-    std::cerr << "Fr_toLongNormal() not implemented for macOS." << std::endl;
-    assert(false);
-}
-inline void Fr_toMontgomery(PFrElement r, PFrElement a){
-    std::cerr << "Fr_toMontgomery() not implemented for macOS." << std::endl;
-    assert(false);
+// Stubs for builds without __USE_ASSEMBLY__ (e.g. Darwin/arm64 today).
+// Calling any of these is a programmer error: the bn128 path is not
+// wired on this platform yet. Abort unconditionally so that misroutes
+// surface immediately instead of silently corrupting the proof.
+[[noreturn]] inline void Fr_unimplemented(const char* fn) {
+    std::cerr << fn << " not implemented in C++ code "
+                 "(build without __USE_ASSEMBLY__)." << std::endl;
+    std::abort();
 }
 
-inline int Fr_isTrue(PFrElement pE){
-    std::cerr << "Fr_isTrue() not implemented for macOS." << std::endl;
-    assert(false);
-    return 0;
-}
-inline int Fr_toInt(PFrElement pE){
-    std::cerr << "Fr_toInt() not implemented for macOS." << std::endl;
-    assert(false);
-    return 0; // Placeholder return value
-}
+inline void Fr_copy(PFrElement r, PFrElement a)                                                      { Fr_unimplemented("Fr_copy"); }
+inline void Fr_copyn(PFrElement r, PFrElement a, int n)                                              { Fr_unimplemented("Fr_copyn"); }
+inline void Fr_add(PFrElement r, PFrElement a, PFrElement b)                                         { Fr_unimplemented("Fr_add"); }
+inline void Fr_sub(PFrElement r, PFrElement a, PFrElement b)                                         { Fr_unimplemented("Fr_sub"); }
+inline void Fr_neg(PFrElement r, PFrElement a)                                                       { Fr_unimplemented("Fr_neg"); }
+inline void Fr_mul(PFrElement r, PFrElement a, PFrElement b)                                         { Fr_unimplemented("Fr_mul"); }
+inline void Fr_square(PFrElement r, PFrElement a)                                                    { Fr_unimplemented("Fr_square"); }
+inline void Fr_band(PFrElement r, PFrElement a, PFrElement b)                                        { Fr_unimplemented("Fr_band"); }
+inline void Fr_bor(PFrElement r, PFrElement a, PFrElement b)                                         { Fr_unimplemented("Fr_bor"); }
+inline void Fr_bxor(PFrElement r, PFrElement a, PFrElement b)                                        { Fr_unimplemented("Fr_bxor"); }
+inline void Fr_bnot(PFrElement r, PFrElement a)                                                      { Fr_unimplemented("Fr_bnot"); }
+inline void Fr_shl(PFrElement r, PFrElement a, PFrElement b)                                         { Fr_unimplemented("Fr_shl"); }
+inline void Fr_shr(PFrElement r, PFrElement a, PFrElement b)                                         { Fr_unimplemented("Fr_shr"); }
+inline void Fr_eq(PFrElement r, PFrElement a, PFrElement b)                                          { Fr_unimplemented("Fr_eq"); }
+inline void Fr_neq(PFrElement r, PFrElement a, PFrElement b)                                         { Fr_unimplemented("Fr_neq"); }
+inline void Fr_lt(PFrElement r, PFrElement a, PFrElement b)                                          { Fr_unimplemented("Fr_lt"); }
+inline void Fr_gt(PFrElement r, PFrElement a, PFrElement b)                                          { Fr_unimplemented("Fr_gt"); }
+inline void Fr_leq(PFrElement r, PFrElement a, PFrElement b)                                         { Fr_unimplemented("Fr_leq"); }
+inline void Fr_geq(PFrElement r, PFrElement a, PFrElement b)                                         { Fr_unimplemented("Fr_geq"); }
+inline void Fr_land(PFrElement r, PFrElement a, PFrElement b)                                        { Fr_unimplemented("Fr_land"); }
+inline void Fr_lor(PFrElement r, PFrElement a, PFrElement b)                                         { Fr_unimplemented("Fr_lor"); }
+inline void Fr_lnot(PFrElement r, PFrElement a)                                                      { Fr_unimplemented("Fr_lnot"); }
+inline void Fr_toNormal(PFrElement r, PFrElement a)                                                  { Fr_unimplemented("Fr_toNormal"); }
+inline void Fr_toLongNormal(PFrElement r, PFrElement a)                                              { Fr_unimplemented("Fr_toLongNormal"); }
+inline void Fr_toMontgomery(PFrElement r, PFrElement a)                                              { Fr_unimplemented("Fr_toMontgomery"); }
 
-inline void Fr_rawCopy(FrRawElement pRawResult, const FrRawElement pRawA) {
-    std::cerr << "Fr_rawCopy() not implemented for macOS." << std::endl;
-    assert(false);
-}
+inline int Fr_isTrue(PFrElement pE)                                                                  { Fr_unimplemented("Fr_isTrue"); }
+inline int Fr_toInt(PFrElement pE)                                                                   { Fr_unimplemented("Fr_toInt"); }
 
-inline void Fr_rawSwap(FrRawElement pRawResult, FrRawElement pRawA) {
-    std::cerr << "Fr_rawSwap() not implemented for macOS." << std::endl;
-    assert(false);
-}
-
-inline void Fr_rawAdd(FrRawElement pRawResult, const FrRawElement pRawA, const FrRawElement pRawB) {
-    std::cerr << "Fr_rawAdd() not implemented for macOS." << std::endl;
-    assert(false);
-}
-
-inline void Fr_rawSub(FrRawElement pRawResult, const FrRawElement pRawA, const FrRawElement pRawB) {
-    std::cerr << "Fr_rawSub() not implemented for macOS." << std::endl;
-    assert(false);
-}
-
-inline void Fr_rawNeg(FrRawElement pRawResult, const FrRawElement pRawA) {
-    std::cerr << "Fr_rawNeg() not implemented for macOS." << std::endl;
-    assert(false);
-}
-
-inline void Fr_rawMMul(FrRawElement pRawResult, const FrRawElement pRawA, const FrRawElement pRawB) {
-    std::cerr << "Fr_rawMMul() not implemented for macOS." << std::endl;
-    assert(false);
-}
-
-inline void Fr_rawMSquare(FrRawElement pRawResult, const FrRawElement pRawA) {
-    std::cerr << "Fr_rawMSquare() not implemented for macOS." << std::endl;
-    assert(false);
-}
-
-inline void Fr_rawMMul1(FrRawElement pRawResult, const FrRawElement pRawA, uint64_t pRawB) {
-    std::cerr << "Fr_rawMMul1() not implemented for macOS." << std::endl;
-    assert(false);
-}
-
-inline void Fr_rawToMontgomery(FrRawElement pRawResult, const FrRawElement &pRawA) {
-    std::cerr << "Fr_rawToMontgomery() not implemented for macOS." << std::endl;
-    assert(false);
-}
-
-inline void Fr_rawFromMontgomery(FrRawElement pRawResult, const FrRawElement &pRawA) {
-    std::cerr << "Fr_rawFromMontgomery() not implemented for macOS." << std::endl;
-    assert(false);
-}
-
-inline int Fr_rawIsEq(const FrRawElement pRawA, const FrRawElement pRawB) {
-    std::cerr << "Fr_rawIsEq() not implemented for macOS." << std::endl;
-    assert(false);
-    return 0;
-}
-
-inline int Fr_rawIsZero(const FrRawElement pRawB) {
-    std::cerr << "Fr_rawIsZero() not implemented for macOS." << std::endl;
-    assert(false);
-    return 0;
-}
-
-inline void Fr_fail() {
-    assert(false);
-}
+inline void Fr_rawCopy(FrRawElement pRawResult, const FrRawElement pRawA)                            { Fr_unimplemented("Fr_rawCopy"); }
+inline void Fr_rawSwap(FrRawElement pRawResult, FrRawElement pRawA)                                  { Fr_unimplemented("Fr_rawSwap"); }
+inline void Fr_rawAdd(FrRawElement pRawResult, const FrRawElement pRawA, const FrRawElement pRawB)   { Fr_unimplemented("Fr_rawAdd"); }
+inline void Fr_rawSub(FrRawElement pRawResult, const FrRawElement pRawA, const FrRawElement pRawB)   { Fr_unimplemented("Fr_rawSub"); }
+inline void Fr_rawNeg(FrRawElement pRawResult, const FrRawElement pRawA)                             { Fr_unimplemented("Fr_rawNeg"); }
+inline void Fr_rawMMul(FrRawElement pRawResult, const FrRawElement pRawA, const FrRawElement pRawB)  { Fr_unimplemented("Fr_rawMMul"); }
+inline void Fr_rawMSquare(FrRawElement pRawResult, const FrRawElement pRawA)                         { Fr_unimplemented("Fr_rawMSquare"); }
+inline void Fr_rawMMul1(FrRawElement pRawResult, const FrRawElement pRawA, uint64_t pRawB)           { Fr_unimplemented("Fr_rawMMul1"); }
+inline void Fr_rawToMontgomery(FrRawElement pRawResult, const FrRawElement &pRawA)                   { Fr_unimplemented("Fr_rawToMontgomery"); }
+inline void Fr_rawFromMontgomery(FrRawElement pRawResult, const FrRawElement &pRawA)                 { Fr_unimplemented("Fr_rawFromMontgomery"); }
+inline int Fr_rawIsEq(const FrRawElement pRawA, const FrRawElement pRawB)                            { Fr_unimplemented("Fr_rawIsEq"); }
+inline int Fr_rawIsZero(const FrRawElement pRawB)                                                    { Fr_unimplemented("Fr_rawIsZero"); }
+inline void Fr_fail()                                                                                { Fr_unimplemented("Fr_fail"); }
 
 #endif // __USE_ASSEMBLY__
 
