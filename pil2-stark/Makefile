@@ -103,7 +103,7 @@ ifeq ($(UNAME_S),Darwin)
     # Preflight: required Homebrew packages must be installed. Probe the header
     # file directly — `brew --prefix <pkg>` returns the would-be path even when
     # the package is uninstalled, so it is not a reliable installed-check.
-    BREW_INSTALL_HINT := brew install libomp gmp libsodium
+    BREW_INSTALL_HINT := brew install libomp gmp libsodium nlohmann-json
     ifeq ($(wildcard $(HOMEBREW_PREFIX)/opt/libomp/include/omp.h),)
         $(error libomp header not found at $(HOMEBREW_PREFIX)/opt/libomp/include/omp.h. Install via: $(BREW_INSTALL_HINT))
     endif
@@ -112,6 +112,9 @@ ifeq ($(UNAME_S),Darwin)
     endif
     ifeq ($(wildcard $(HOMEBREW_PREFIX)/opt/libsodium/include/sodium.h),)
         $(error libsodium header not found at $(HOMEBREW_PREFIX)/opt/libsodium/include/sodium.h. Install via: $(BREW_INSTALL_HINT))
+    endif
+    ifeq ($(wildcard $(HOMEBREW_PREFIX)/include/nlohmann/json.hpp),)
+        $(error nlohmann-json header not found at $(HOMEBREW_PREFIX)/include/nlohmann/json.hpp. Install via: $(BREW_INSTALL_HINT))
     endif
 
     CXX      = clang++
