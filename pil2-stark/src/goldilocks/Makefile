@@ -17,7 +17,9 @@ ifeq ($(UNAME_S),Darwin)
     CXXFLAGS = -std=c++17 -Wall -pthread -O3 -I./src -I$(HOMEBREW_PREFIX)/include -I$(HOMEBREW_PREFIX)/opt/libomp/include -isysroot $(SDKPATH) -Xpreprocessor -fopenmp
     CPPFLAGS = -isysroot $(SDKPATH)
     LDFLAGS  = -L$(HOMEBREW_PREFIX)/lib -L$(HOMEBREW_PREFIX)/opt/libomp/lib -L$(SDKPATH)/usr/lib
-    LDLIBS   = -lomp -lbenchmark -lbenchmark_main -lgtest -lgtest_main -lgmpxx -lgmp -lpthread
+    LDLIBS_COMMON = -lomp -lgmpxx -lgmp -lpthread
+    LDLIBS_TEST   = $(LDLIBS_COMMON) -lgtest -lgtest_main
+    LDLIBS_BENCH  = $(LDLIBS_COMMON) -lbenchmark -lbenchmark_main
 endif
 
 ifeq ($(UNAME_S),Linux)
