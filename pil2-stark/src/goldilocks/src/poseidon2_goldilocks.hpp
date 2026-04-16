@@ -256,7 +256,7 @@ template<uint32_t W>
 {
     static const char *names[] = { "Auto", "Scalar", "Avx", "AvxBatch", "Avx512", "Avx512Batch" };
     int idx = static_cast<int>(m);
-    const char *name = (idx >= 0 && idx < 6) ? names[idx] : "<unknown>";
+    const char *name = (idx >= 0 && idx < (int)(sizeof(names) / sizeof(*names))) ? names[idx] : "<unknown>";
     std::fprintf(stderr,
         "Poseidon2Goldilocks<%u>::%s: mode %s is not available in this build "
         "(not compiled in, or not valid for this operation)\n",
