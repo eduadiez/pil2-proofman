@@ -90,7 +90,30 @@ INC_DIRS := $(shell find $(SRC_DIRS) -type d)
 INC_FLAGS := $(addprefix -I,$(INC_DIRS))
 
 ifeq ($(UNAME_S),Darwin)
-    HOMEBREW_PREFIX := $(shell brew --prefix)
+    # Resolve Homebrew prefix; fall back to architecture defaults if `brew` is not in PATH.
+    HOMEBREW_PREFIX := $(shell brew --prefix 2>/dev/null)
+    ifeq ($(HOMEBREW_PREFIX),)
+        ifeq ($(shell uname -m),arm64)
+            HOMEBREW_PREFIX := /opt/homebrew
+        else
+            HOMEBREW_PREFIX := /usr/local
+        endif
+    endif
+
+    # Preflight: required Homebrew packages must be installed. Probe the header
+    # file directly — `brew --prefix <pkg>` returns the would-be path even when
+    # the package is uninstalled, so it is not a reliable installed-check.
+    BREW_INSTALL_HINT := brew install libomp gmp libsodium
+    ifeq ($(wildcard $(HOMEBREW_PREFIX)/opt/libomp/include/omp.h),)
+        $(error libomp header not found at $(HOMEBREW_PREFIX)/opt/libomp/include/omp.h. Install via: $(BREW_INSTALL_HINT))
+    endif
+    ifeq ($(wildcard $(HOMEBREW_PREFIX)/include/gmp.h),)
+        $(error gmp header not found at $(HOMEBREW_PREFIX)/include/gmp.h. Install via: $(BREW_INSTALL_HINT))
+    endif
+    ifeq ($(wildcard $(HOMEBREW_PREFIX)/opt/libsodium/include/sodium.h),)
+        $(error libsodium header not found at $(HOMEBREW_PREFIX)/opt/libsodium/include/sodium.h. Install via: $(BREW_INSTALL_HINT))
+    endif
+
     CXX      = clang++
     SDKPATH  = /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk
     CPPFLAGS = -isysroot $(SDKPATH) -I$(HOMEBREW_PREFIX)/include -I$(HOMEBREW_PREFIX)/opt/libomp/include \
