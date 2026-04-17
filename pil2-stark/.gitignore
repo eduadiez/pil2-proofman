@@ -3,10 +3,3 @@ runtime/*
 !runtime/README.md
 MyLogFile.log
 lib/libstarks.a
-lib/include/
-src/goldilocks/build/
-src/goldilocks/build_gpu/
-src/goldilocks/testscpu
-src/goldilocks/testsgpu
-src/goldilocks/benchscpu
-src/goldilocks/benchsgpu

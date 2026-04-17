@@ -1,0 +1,84 @@
+Unable to determine clock rate from sysctl: hw.cpufrequency: No such file or directory
+This does not affect benchmark measurements, only the metadata output.
+***WARNING*** Failed to set thread affinity. Estimated CPU frequency may be incorrect.
+2026-04-17T12:58:40+02:00
+Running /Users/edu/Development/pil2-proofman/pil2-stark/src/goldilocks/benchscpu
+Run on (14 X 24 MHz CPU s)
+CPU Caches:
+  L1 Data 64 KiB
+  L1 Instruction 128 KiB
+  L2 Unified 4096 KiB (x14)
+Load Average: 7.39, 13.11, 12.60
+----------------------------------------------------------------------------------------------
+Benchmark                                                    Time             CPU   Iterations
+----------------------------------------------------------------------------------------------
+ADD_OP_BENCH/real_time                                     732 us          732 us         1906
+SUB_OP_BENCH/real_time                                    1180 us         1180 us         1177
+MUL_OP_BENCH/real_time                                    1956 us         1955 us          714
+INV_OP_BENCH/real_time                                   11644 us        11638 us          117
+NTT_CPU_BENCH/24/real_time                                 195 ms          127 ms            7
+NTT_CPU_BENCH/36/real_time                                 257 ms          169 ms            5
+NTT_CPU_BENCH/56/real_time                                 363 ms          255 ms            4
+INTT_CPU_BENCH/24/real_time                                195 ms          129 ms            8
+INTT_CPU_BENCH/36/real_time                                265 ms          186 ms            5
+INTT_CPU_BENCH/56/real_time                                370 ms          275 ms            4
+LDE_CPU_BENCH/24/real_time                                 235 ms          157 ms            6
+LDE_CPU_BENCH/36/real_time                                 313 ms          224 ms            4
+LDE_CPU_BENCH/56/real_time                                 450 ms          321 ms            3
+PERMUTE_W4_SCALAR_CPU_BENCH/real_time                      108 ms         80.3 ms           13
+PERMUTE_W8_SCALAR_CPU_BENCH/real_time                      178 ms          130 ms            8
+PERMUTE_W12_SCALAR_CPU_BENCH/real_time                     236 ms          180 ms            6
+PERMUTE_W16_SCALAR_CPU_BENCH/real_time                     307 ms          235 ms            5
+PERMUTE_W4_NEON_CPU_BENCH/real_time                        103 ms         76.0 ms           11
+PERMUTE_W8_NEON_CPU_BENCH/real_time                        179 ms          139 ms            8
+PERMUTE_W12_NEON_CPU_BENCH/real_time                       256 ms          201 ms            5
+PERMUTE_W16_NEON_CPU_BENCH/real_time                       340 ms          277 ms            4
+COMPRESS_W4_SCALAR_CPU_BENCH/real_time                     109 ms         83.2 ms           11
+COMPRESS_W8_SCALAR_CPU_BENCH/real_time                     180 ms          138 ms            8
+COMPRESS_W12_SCALAR_CPU_BENCH/real_time                    237 ms          186 ms            6
+COMPRESS_W16_SCALAR_CPU_BENCH/real_time                    310 ms          249 ms            4
+COMPRESS_W4_NEON_CPU_BENCH/real_time                       106 ms         75.4 ms           14
+COMPRESS_W8_NEON_CPU_BENCH/real_time                       181 ms          134 ms            8
+COMPRESS_W12_NEON_CPU_BENCH/real_time                      261 ms          207 ms            5
+COMPRESS_W16_NEON_CPU_BENCH/real_time                      351 ms          279 ms            4
+LINEAR_HASH_W8_SCALAR_CPU_BENCH/24/real_time              4050 ms         3346 ms            1
+LINEAR_HASH_W8_SCALAR_CPU_BENCH/36/real_time              6019 ms         5079 ms            1
+LINEAR_HASH_W8_SCALAR_CPU_BENCH/56/real_time              9207 ms         7897 ms            1
+LINEAR_HASH_W12_SCALAR_CPU_BENCH/24/real_time             2821 ms         2317 ms            1
+LINEAR_HASH_W12_SCALAR_CPU_BENCH/36/real_time             4468 ms         3756 ms            1
+LINEAR_HASH_W12_SCALAR_CPU_BENCH/56/real_time             6224 ms         5210 ms            1
+LINEAR_HASH_W16_SCALAR_CPU_BENCH/24/real_time             2410 ms         1917 ms            1
+LINEAR_HASH_W16_SCALAR_CPU_BENCH/36/real_time             3524 ms         3042 ms            1
+LINEAR_HASH_W16_SCALAR_CPU_BENCH/56/real_time             5855 ms         5010 ms            1
+MERKLETREE_W8_AR2_SCALAR_CPU_BENCH/24/real_time           4614 ms         3918 ms            1
+MERKLETREE_W8_AR2_SCALAR_CPU_BENCH/36/real_time           6669 ms         5680 ms            1
+MERKLETREE_W8_AR2_SCALAR_CPU_BENCH/56/real_time           9874 ms         8421 ms            1
+MERKLETREE_W12_AR3_SCALAR_CPU_BENCH/24/real_time          3214 ms         2608 ms            1
+MERKLETREE_W12_AR3_SCALAR_CPU_BENCH/36/real_time          4900 ms         4083 ms            1
+MERKLETREE_W12_AR3_SCALAR_CPU_BENCH/56/real_time          6687 ms         5600 ms            1
+MERKLETREE_W16_AR4_SCALAR_CPU_BENCH/24/real_time          2752 ms         2272 ms            1
+MERKLETREE_W16_AR4_SCALAR_CPU_BENCH/36/real_time          4033 ms         3320 ms            1
+MERKLETREE_W16_AR4_SCALAR_CPU_BENCH/56/real_time          6255 ms         5218 ms            1
+MERKLETREE_W8_AR2_NEON_CPU_BENCH/24/real_time             4851 ms         4027 ms            1
+MERKLETREE_W8_AR2_NEON_CPU_BENCH/36/real_time             6737 ms         5698 ms            1
+MERKLETREE_W8_AR2_NEON_CPU_BENCH/56/real_time             9986 ms         8651 ms            1
+MERKLETREE_W12_AR3_NEON_CPU_BENCH/24/real_time            3484 ms         2926 ms            1
+MERKLETREE_W12_AR3_NEON_CPU_BENCH/36/real_time            5550 ms         4701 ms            1
+MERKLETREE_W12_AR3_NEON_CPU_BENCH/56/real_time            7467 ms         6245 ms            1
+MERKLETREE_W16_AR4_NEON_CPU_BENCH/24/real_time            3045 ms         2573 ms            1
+MERKLETREE_W16_AR4_NEON_CPU_BENCH/36/real_time            4350 ms         3735 ms            1
+MERKLETREE_W16_AR4_NEON_CPU_BENCH/56/real_time            7052 ms         5861 ms            1
+MERKLETREE_W8_AR2_NEONBATCH_CPU_BENCH/24/real_time        4735 ms         3939 ms            1
+MERKLETREE_W8_AR2_NEONBATCH_CPU_BENCH/36/real_time        6513 ms         5886 ms            1
+MERKLETREE_W8_AR2_NEONBATCH_CPU_BENCH/56/real_time        9149 ms         8789 ms            1
+MERKLETREE_W12_AR3_NEONBATCH_CPU_BENCH/24/real_time       3066 ms         2962 ms            1
+MERKLETREE_W12_AR3_NEONBATCH_CPU_BENCH/36/real_time       4932 ms         4484 ms            1
+MERKLETREE_W12_AR3_NEONBATCH_CPU_BENCH/56/real_time       6615 ms         6100 ms            1
+MERKLETREE_W16_AR4_NEONBATCH_CPU_BENCH/24/real_time       2853 ms         2600 ms            1
+MERKLETREE_W16_AR4_NEONBATCH_CPU_BENCH/36/real_time       3935 ms         3698 ms            1
+MERKLETREE_W16_AR4_NEONBATCH_CPU_BENCH/56/real_time       6357 ms         5885 ms            1
+GRINDING_CPU_BENCH/20/real_time                           80.4 ms         45.2 ms           24
+GRINDING_CPU_BENCH/21/real_time                            119 ms         66.2 ms           13
+GRINDING_CPU_BENCH/22/real_time                            186 ms          104 ms            6
+GRINDING_CPU_BENCH/24/real_time                            339 ms          193 ms            4
+GRINDING_CPU_BENCH/25/real_time                           2020 ms         1136 ms            1

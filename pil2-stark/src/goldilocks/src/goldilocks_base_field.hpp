@@ -1,13 +1,15 @@
 #ifndef GOLDILOCKS_BASE
 #define GOLDILOCKS_BASE
 
+#include "platform.hpp"
 #include <stdint.h> // uint64_t
 #include <string>   // string
+#include <vector>   // batchInverse thread_local scratch
 #include <gmpxx.h>
 #include <iostream> // string
 #include <omp.h>
 
-#ifdef __AVX2__ 
+#if PIL2_HAS_AVX2
 #include <immintrin.h>
 #endif
 #include <cassert>
@@ -134,7 +136,17 @@ public:
 
     static void batchInverse(Element *res, const Element *src, uint64_t size)
     {
-        Element* tmp = new Element[size];
+        // Thread-local scratch reused across calls on the same thread.
+        // Montgomery-trick batch inverse is called repeatedly per proof
+        // with a small `size` (typically nrowsPack=128); `new Element[size]`
+        // per call was burning 100-500ns in malloc/free each time.
+        // thread_local keeps the buffer alive for the thread's lifetime and
+        // grows it on demand. Max residency = (max threads) * (max size).
+        thread_local std::vector<Element> tmp_buf;
+        if (tmp_buf.size() < size) {
+            tmp_buf.resize(size);
+        }
+        Element* tmp = tmp_buf.data();
         copy(tmp[0], src[0]);
 
         for (uint64_t i = 1; i < size; i++)
@@ -152,14 +164,12 @@ public:
             copy(z, z2);
         }
         copy(res[0], z);
-
-        delete[] tmp;
     }
 
     /*
         AVX operations
     */
-#ifdef __AVX2__
+#if PIL2_HAS_AVX2
     static void set_avx(__m256i &a, const Goldilocks::Element &a3, const Goldilocks::Element &a2, const Goldilocks::Element &a1, const Goldilocks::Element &a0);
 
     static void load_avx(__m256i &a_, const Goldilocks::Element *a4);
@@ -214,7 +224,7 @@ public:
     /*
         AVX512 operations
     */
-#ifdef __AVX512__ 
+#if PIL2_HAS_AVX512 
 
     static void load_avx512(__m512i &a_, const Goldilocks::Element *a8);
     static void load_avx512(__m512i &a, const Goldilocks::Element *a8_a, uint64_t stride);
@@ -284,7 +294,7 @@ inline Goldilocks::Element operator+(const Goldilocks::Element &in1) { return in
 #include "goldilocks_base_field_scalar.hpp"
 #include "goldilocks_base_field_avx.hpp"
 #include "goldilocks_base_field_pack.hpp"
-#ifdef __AVX512__
+#if PIL2_HAS_AVX512
 #include "goldilocks_base_field_avx512.hpp"
 #endif
 

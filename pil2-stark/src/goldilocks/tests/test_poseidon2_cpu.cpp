@@ -234,7 +234,8 @@ static void merkletreeModeEquivalence(uint64_t arity, uint64_t nrows, uint64_t n
 
     auto rootOf = [&](Poseidon2Mode m, Goldilocks::Element out[4]) {
         std::vector<Goldilocks::Element> tree(numElems);
-        Poseidon2Goldilocks<W>::merkletree(tree.data(), input.data(), ncols, nrows, arity, m);
+        Poseidon2Goldilocks<W>::merkletree(tree.data(), input.data(), ncols, nrows, arity,
+                                           0, 1, m);
         std::memcpy(out, &tree[numElems - HASH_SIZE], HASH_SIZE * sizeof(Goldilocks::Element));
     };
 
@@ -327,7 +328,7 @@ TEST(Poseidon2, grinding_cpu)
     uint64_t level = (1ULL << (64 - n_bits));
     Goldilocks::Element x[4] = {in[0], in[1], in[2], result_index};
     Goldilocks::Element result[4];
-    Poseidon2GoldilocksGrinding::permute(result, x, Poseidon2Mode::Scalar);
+    Poseidon2GoldilocksGrinding::permute(result, &x[0], Poseidon2Mode::Scalar);
     ASSERT_LT(Goldilocks::toU64(result[0]), level);
 }
 
@@ -419,7 +420,8 @@ static void merkletreeNrows1(uint64_t arity, uint64_t ncols)
 
     uint64_t numElems = getTreeNumElements(1, arity);
     std::vector<Goldilocks::Element> tree(numElems);
-    Poseidon2Goldilocks<W>::merkletree(tree.data(), input.data(), ncols, 1, arity, Poseidon2Mode::Scalar);
+    Poseidon2Goldilocks<W>::merkletree(tree.data(), input.data(), ncols, 1, arity,
+                                       0, 1, Poseidon2Mode::Scalar);
 
     Goldilocks::Element root[HASH_SIZE];
     std::memcpy(root, &tree[numElems - HASH_SIZE], HASH_SIZE * sizeof(Goldilocks::Element));
@@ -448,6 +450,6 @@ TEST(Poseidon2, grinding_nbits1)
     uint64_t level = (1ULL << 63);
     Goldilocks::Element x[4] = {in[0], in[1], in[2], nonce};
     Goldilocks::Element result[4];
-    Poseidon2GoldilocksGrinding::permute(result, x, Poseidon2Mode::Scalar);
+    Poseidon2GoldilocksGrinding::permute(result, &x[0], Poseidon2Mode::Scalar);
     ASSERT_LT(Goldilocks::toU64(result[0]), level);
 }

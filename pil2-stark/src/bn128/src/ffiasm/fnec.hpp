@@ -6,6 +6,7 @@
 #include <gmp.h>
 #include <iostream>
 #include <cassert>
+#include <cstdlib>
 
 #define Fnec_N64 4
 #define Fnec_SHORT 0x00000000
@@ -76,171 +77,58 @@ typedef FnecElement *PFnecElement;
     static FnecRawElement Fnec_rawq;
     static FnecRawElement Fnec_rawR3;
 
-    inline void Fnec_copy(PFnecElement r, PFnecElement a){
-        std::cerr << "Fnec_copy() not implemented in C++ code." << std::endl;
-        assert(true);
-    }
-    inline void Fnec_copyn(PFnecElement r, PFnecElement a, int n){
-        std::cerr << "Fnec_copyn() not implemented in C++ code." << std::endl;
-        assert(true);
-    }
-    inline void Fnec_add(PFnecElement r, PFnecElement a, PFnecElement b) {
-        std::cerr << "Fnec_add() not implemented in C++ code." << std::endl;
-        assert(true);
-    }
-    inline void Fnec_sub(PFnecElement r, PFnecElement a, PFnecElement b) {
-        std::cerr << "Fnec_sub() not implemented in C++ code." << std::endl;
-        assert(true);
-    }
-    inline void Fnec_neg(PFnecElement r, PFnecElement a) {
-        std::cerr << "Fnec_neg() not implemented in C++ code." << std::endl;
-        assert(true);
-    }
-    inline void Fnec_mul(PFnecElement r, PFnecElement a, PFnecElement b) {
-        std::cerr << "Fnec_mul() not implemented in C++ code." << std::endl;
-        assert(true);
-    }
-    inline void Fnec_square(PFnecElement r, PFnecElement a) {
-        std::cerr << "Fnec_square() not implemented in C++ code." << std::endl;
-        assert(true);
-    }
-    inline void Fnec_band(PFnecElement r, PFnecElement a, PFnecElement b) {
-        std::cerr << "Fnec_band() not implemented in C++ code." << std::endl;
-        assert(true);
-    }
-    inline void Fnec_bor(PFnecElement r, PFnecElement a, PFnecElement b) {
-        std::cerr << "Fnec_bor() not implemented in C++ code." << std::endl;
-        assert(true);
-    }
-    inline void Fnec_bxor(PFnecElement r, PFnecElement a, PFnecElement b) {
-        std::cerr << "Fnec_bxor() not implemented in C++ code." << std::endl;
-        assert(true);
-    }
-    inline void Fnec_bnot(PFnecElement r, PFnecElement a) {
-        std::cerr << "Fnec_bnot() not implemented in C++ code." << std::endl;
-        assert(true);
-    }
-    inline void Fnec_shl(PFnecElement r, PFnecElement a, PFnecElement b) {
-        std::cerr << "Fnec_shl() not implemented in C++ code." << std::endl;
-        assert(true);
-    }
-    inline void Fnec_shr(PFnecElement r, PFnecElement a, PFnecElement b) {
-        std::cerr << "Fnec_shr() not implemented in C++ code." << std::endl;
-        assert(true);
-    }
-    inline void Fnec_eq(PFnecElement r, PFnecElement a, PFnecElement b) {
-        std::cerr << "Fnec_eq() not implemented in C++ code." << std::endl;
-        assert(true);
-    }
-    inline void Fnec_neq(PFnecElement r, PFnecElement a, PFnecElement b) {
-        std::cerr << "Fnec_neq() not implemented in C++ code." << std::endl;
-        assert(true);
-    }
-    inline void Fnec_lt(PFnecElement r, PFnecElement a, PFnecElement b) {
-        std::cerr << "Fnec_lt() not implemented in C++ code." << std::endl;
-        assert(true);
-    }
-    inline void Fnec_gt(PFnecElement r, PFnecElement a, PFnecElement b) {
-        std::cerr << "Fnec_gt() not implemented in C++ code." << std::endl;
-        assert(true);
-    }
-    inline void Fnec_leq(PFnecElement r, PFnecElement a, PFnecElement b) {
-        std::cerr << "Fnec_leq() not implemented in C++ code." << std::endl;
-        assert(true);
-    }
-    inline void Fnec_geq(PFnecElement r, PFnecElement a, PFnecElement b){
-        std::cerr << "Fnec_geq() not implemented in C++ code." << std::endl;
-        assert(true);
-    }
-    inline void Fnec_land(PFnecElement r, PFnecElement a, PFnecElement b) {
-        std::cerr << "Fnec_land() not implemented in C++ code." << std::endl;
-        assert(true);
-    }
-    inline void Fnec_lor(PFnecElement r, PFnecElement a, PFnecElement b) {
-        std::cerr << "Fnec_lor() not implemented in C++ code." << std::endl;
-        assert(true);
-    }
-    inline void Fnec_lnot(PFnecElement r, PFnecElement a) {
-        std::cerr << "Fnec_lnot() not implemented in C++ code." << std::endl;
-        assert(true);
-    }
-    inline void Fnec_toNormal(PFnecElement r, PFnecElement a) {
-        std::cerr << "Fnec_toNormal() not implemented in C++ code." << std::endl;
-        assert(true);
-    }
-    inline void Fnec_toLongNormal(PFnecElement r, PFnecElement a) {
-        std::cerr << "Fnec_toLongNormal() not implemented in C++ code." << std::endl;
-        assert(true);
-    }
-    inline void Fnec_toMontgomery(PFnecElement r, PFnecElement a) {
-        std::cerr << "Fnec_toMontgomery() not implemented in C++ code." << std::endl;
-        assert(true);
+    // Stubs for builds without __USE_ASSEMBLY__ (e.g. Darwin/arm64 today).
+    // Calling any of these is a programmer error: the bn128 path is not
+    // wired on this platform yet. Abort unconditionally so that misroutes
+    // surface immediately instead of silently corrupting the proof.
+    [[noreturn]] inline void Fnec_unimplemented(const char* fn) {
+        std::cerr << fn << " not implemented in C++ code "
+                     "(build without __USE_ASSEMBLY__)." << std::endl;
+        std::abort();
     }
 
-    inline int Fnec_isTrue(PFnecElement pE){
-        std::cerr << "Fnec_isTrue() not implemented in C++ code." << std::endl;
-        assert(true);
-        return 0; // Placeholder return value
-    }
-    inline int Fnec_toInt(PFnecElement pE) {
-        std::cerr << "Fnec_toInt() not implemented in C++ code." << std::endl;
-        assert(true);
-        return 0; // Placeholder return value
-    }
+    inline void Fnec_copy(PFnecElement r, PFnecElement a)                                                       { Fnec_unimplemented("Fnec_copy"); }
+    inline void Fnec_copyn(PFnecElement r, PFnecElement a, int n)                                               { Fnec_unimplemented("Fnec_copyn"); }
+    inline void Fnec_add(PFnecElement r, PFnecElement a, PFnecElement b)                                        { Fnec_unimplemented("Fnec_add"); }
+    inline void Fnec_sub(PFnecElement r, PFnecElement a, PFnecElement b)                                        { Fnec_unimplemented("Fnec_sub"); }
+    inline void Fnec_neg(PFnecElement r, PFnecElement a)                                                        { Fnec_unimplemented("Fnec_neg"); }
+    inline void Fnec_mul(PFnecElement r, PFnecElement a, PFnecElement b)                                        { Fnec_unimplemented("Fnec_mul"); }
+    inline void Fnec_square(PFnecElement r, PFnecElement a)                                                     { Fnec_unimplemented("Fnec_square"); }
+    inline void Fnec_band(PFnecElement r, PFnecElement a, PFnecElement b)                                       { Fnec_unimplemented("Fnec_band"); }
+    inline void Fnec_bor(PFnecElement r, PFnecElement a, PFnecElement b)                                        { Fnec_unimplemented("Fnec_bor"); }
+    inline void Fnec_bxor(PFnecElement r, PFnecElement a, PFnecElement b)                                       { Fnec_unimplemented("Fnec_bxor"); }
+    inline void Fnec_bnot(PFnecElement r, PFnecElement a)                                                       { Fnec_unimplemented("Fnec_bnot"); }
+    inline void Fnec_shl(PFnecElement r, PFnecElement a, PFnecElement b)                                        { Fnec_unimplemented("Fnec_shl"); }
+    inline void Fnec_shr(PFnecElement r, PFnecElement a, PFnecElement b)                                        { Fnec_unimplemented("Fnec_shr"); }
+    inline void Fnec_eq(PFnecElement r, PFnecElement a, PFnecElement b)                                         { Fnec_unimplemented("Fnec_eq"); }
+    inline void Fnec_neq(PFnecElement r, PFnecElement a, PFnecElement b)                                        { Fnec_unimplemented("Fnec_neq"); }
+    inline void Fnec_lt(PFnecElement r, PFnecElement a, PFnecElement b)                                         { Fnec_unimplemented("Fnec_lt"); }
+    inline void Fnec_gt(PFnecElement r, PFnecElement a, PFnecElement b)                                         { Fnec_unimplemented("Fnec_gt"); }
+    inline void Fnec_leq(PFnecElement r, PFnecElement a, PFnecElement b)                                        { Fnec_unimplemented("Fnec_leq"); }
+    inline void Fnec_geq(PFnecElement r, PFnecElement a, PFnecElement b)                                        { Fnec_unimplemented("Fnec_geq"); }
+    inline void Fnec_land(PFnecElement r, PFnecElement a, PFnecElement b)                                       { Fnec_unimplemented("Fnec_land"); }
+    inline void Fnec_lor(PFnecElement r, PFnecElement a, PFnecElement b)                                        { Fnec_unimplemented("Fnec_lor"); }
+    inline void Fnec_lnot(PFnecElement r, PFnecElement a)                                                       { Fnec_unimplemented("Fnec_lnot"); }
+    inline void Fnec_toNormal(PFnecElement r, PFnecElement a)                                                   { Fnec_unimplemented("Fnec_toNormal"); }
+    inline void Fnec_toLongNormal(PFnecElement r, PFnecElement a)                                               { Fnec_unimplemented("Fnec_toLongNormal"); }
+    inline void Fnec_toMontgomery(PFnecElement r, PFnecElement a)                                               { Fnec_unimplemented("Fnec_toMontgomery"); }
 
-    inline void Fnec_rawCopy(FnecRawElement pRawResult, const FnecRawElement pRawA) {
-        std::cerr << "Fnec_rawCopy() not implemented in C++ code." << std::endl;
-        assert(true);
-    }
-    inline void Fnec_rawSwap(FnecRawElement pRawResult, FnecRawElement pRawA) {
-        std::cerr << "Fnec_rawSwap() not implemented in C++ code." << std::endl;
-        assert(true);
-    }
-    inline void Fnec_rawAdd(FnecRawElement pRawResult, const FnecRawElement pRawA, const FnecRawElement pRawB) {
-        std::cerr << "Fnec_rawAdd() not implemented in C++ code." << std::endl;
-        assert(true);
-    }
-    inline void Fnec_rawSub(FnecRawElement pRawResult, const FnecRawElement pRawA, const FnecRawElement pRawB) {
-        std::cerr << "Fnec_rawSub() not implemented in C++ code." << std::endl;
-        assert(true);
-    }
-    inline void Fnec_rawNeg(FnecRawElement pRawResult, const FnecRawElement pRawA) {
-        std::cerr << "Fnec_rawNeg() not implemented in C++ code." << std::endl;
-        assert(true);
-    }
-    inline void Fnec_rawMMul(FnecRawElement pRawResult, const FnecRawElement pRawA, const FnecRawElement pRawB) {
-        std::cerr << "Fnec_rawMMul() not implemented in C++ code." << std::endl;
-        assert(true);
-    }
-    inline void Fnec_rawMSquare(FnecRawElement pRawResult, const FnecRawElement pRawA) {
-        std::cerr << "Fnec_rawMSquare() not implemented in C++ code." << std::endl;
-        assert(true);
-    }
-    inline void Fnec_rawMMul1(FnecRawElement pRawResult, const FnecRawElement pRawA, uint64_t pRawB) {
-        std::cerr << "Fnec_rawMMul1() not implemented in C++ code." << std::endl;
-        assert(true);
-    }
-    inline void Fnec_rawToMontgomery(FnecRawElement pRawResult, const FnecRawElement &pRawA) {
-        std::cerr << "Fnec_rawToMontgomery() not implemented in C++ code." << std::endl;
-        assert(false);
-    }
-    inline void Fnec_rawFromMontgomery(FnecRawElement pRawResult, const FnecRawElement &pRawA) {
-        std::cerr << "Fnec_rawFromMontgomery() not implemented in C++ code." << std::endl;
-        assert(true);
-    }
-    inline int Fnec_rawIsEq(const FnecRawElement pRawA, const FnecRawElement pRawB) {
-        std::cerr << "Fnec_rawIsEq() not implemented in C++ code." << std::endl;
-        assert(true);
-        return 0;
-    }
-    inline int Fnec_rawIsZero(const FnecRawElement pRawB) {
-        std::cerr << "Fnec_rawIsZero() not implemented in C++ code." << std::endl;
-        assert(true);
-        return 0;
-    }
-    inline void Fnec_fail() {
-        assert(true);
-    }
+    inline int Fnec_isTrue(PFnecElement pE)                                                                     { Fnec_unimplemented("Fnec_isTrue"); }
+    inline int Fnec_toInt(PFnecElement pE)                                                                      { Fnec_unimplemented("Fnec_toInt"); }
+
+    inline void Fnec_rawCopy(FnecRawElement pRawResult, const FnecRawElement pRawA)                             { Fnec_unimplemented("Fnec_rawCopy"); }
+    inline void Fnec_rawSwap(FnecRawElement pRawResult, FnecRawElement pRawA)                                   { Fnec_unimplemented("Fnec_rawSwap"); }
+    inline void Fnec_rawAdd(FnecRawElement pRawResult, const FnecRawElement pRawA, const FnecRawElement pRawB)  { Fnec_unimplemented("Fnec_rawAdd"); }
+    inline void Fnec_rawSub(FnecRawElement pRawResult, const FnecRawElement pRawA, const FnecRawElement pRawB)  { Fnec_unimplemented("Fnec_rawSub"); }
+    inline void Fnec_rawNeg(FnecRawElement pRawResult, const FnecRawElement pRawA)                              { Fnec_unimplemented("Fnec_rawNeg"); }
+    inline void Fnec_rawMMul(FnecRawElement pRawResult, const FnecRawElement pRawA, const FnecRawElement pRawB) { Fnec_unimplemented("Fnec_rawMMul"); }
+    inline void Fnec_rawMSquare(FnecRawElement pRawResult, const FnecRawElement pRawA)                          { Fnec_unimplemented("Fnec_rawMSquare"); }
+    inline void Fnec_rawMMul1(FnecRawElement pRawResult, const FnecRawElement pRawA, uint64_t pRawB)            { Fnec_unimplemented("Fnec_rawMMul1"); }
+    inline void Fnec_rawToMontgomery(FnecRawElement pRawResult, const FnecRawElement &pRawA)                    { Fnec_unimplemented("Fnec_rawToMontgomery"); }
+    inline void Fnec_rawFromMontgomery(FnecRawElement pRawResult, const FnecRawElement &pRawA)                  { Fnec_unimplemented("Fnec_rawFromMontgomery"); }
+    inline int Fnec_rawIsEq(const FnecRawElement pRawA, const FnecRawElement pRawB)                             { Fnec_unimplemented("Fnec_rawIsEq"); }
+    inline int Fnec_rawIsZero(const FnecRawElement pRawB)                                                       { Fnec_unimplemented("Fnec_rawIsZero"); }
+    inline void Fnec_fail()                                                                                     { Fnec_unimplemented("Fnec_fail"); }
 #endif
 
 

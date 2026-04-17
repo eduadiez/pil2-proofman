@@ -23,6 +23,27 @@ jobs:
 
       - name: cargo test
         run: cargo test --workspace
+  goldilocks-cpp-tests-macos:
+    # Apple Silicon (arm64) build + test of the standalone goldilocks C++ test
+    # suite. Validates the Darwin Makefile path (LDLIBS split, Homebrew preflight)
+    # and keeps the suite green as the NEON / Metal port lands incrementally.
+    # google-benchmark is intentionally NOT installed: testscpu must link without it.
+    # Marked continue-on-error while the macOS path is still being built out;
+    # promote to required after Parts 2–4 land.
+    name: goldilocks C++ tests (macOS arm64)
+    runs-on: macos-14
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Homebrew dependencies
+        run: brew install libomp gmp libsodium googletest
+      - name: Build testscpu
+        working-directory: pil2-stark/src/goldilocks
+        run: make testscpu
+      - name: Run testscpu
+        working-directory: pil2-stark/src/goldilocks
+        run: ./testscpu
   cargo-check:
     name: cargo check
     runs-on: ubuntu-latest

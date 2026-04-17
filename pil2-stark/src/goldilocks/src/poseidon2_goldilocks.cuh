@@ -11,9 +11,11 @@
 extern __shared__ gl64_t scratchpad[];
 
 // GPU input layout selector.
+// Every linearHash / merkletree / buildMerkleTreeGPU call must pick one —
+// there is no default, because getting it wrong silently corrupts Merkle roots.
 enum class Layout : uint8_t {
-    RowMajor,
-    Tiles,
+    RowMajor,   // nCols contiguous elements per row, rows stacked
+    Tiles,      // block-tiled layout produced by fromRowMajorToTiled
 };
 
 
@@ -29,12 +31,9 @@ public:
     static constexpr uint32_t N_PARTIAL_ROUNDS = SPONGE_WIDTH_T == 4 ? 21 : 22;
     static constexpr uint32_t N_ROUNDS = N_FULL_ROUNDS_TOTAL + N_PARTIAL_ROUNDS;
 
-    static_assert(SPONGE_WIDTH_T == 4 || SPONGE_WIDTH_T == 8 || SPONGE_WIDTH_T == 12 || SPONGE_WIDTH_T == 16, "SPONGE_WIDTH_T must be 4, 8, 12, or 16");
-
     void static initConstants(uint32_t* gpu_ids, uint32_t num_gpu_ids);
 
     void static permute(uint64_t * output, const uint64_t * input, cudaStream_t stream = 0);
-
     void static compress(uint64_t * output, const uint64_t * input, cudaStream_t stream = 0);
 
     void static linearHash(uint64_t * d_hash_output, uint64_t * d_trace, uint64_t num_cols, uint64_t num_rows, Layout layout, cudaStream_t stream);
@@ -45,11 +44,14 @@ public:
 
     void static grinding(uint64_t * d_nonce, uint64_t *d_nonceBlock, const uint64_t * d_in, const uint32_t n_bits, cudaStream_t stream);
 
+    static_assert(SPONGE_WIDTH_T == 4 || SPONGE_WIDTH_T == 8 || SPONGE_WIDTH_T == 12 || SPONGE_WIDTH_T == 16, "SPONGE_WIDTH_T must be 4, 8, 12, or 16");
+
 };
 
 using Poseidon2GoldilocksGPUGrinding = Poseidon2GoldilocksGPU<4>;  // SPONGE_WIDTH = 4
 
-// Dispatch merkletree by arity
+// Dispatch merkletree by arity. Caller supplies the input `layout`
+// (Layout::RowMajor for flat row-major buffers, Layout::Tiles for block-tiled).
 void buildMerkleTreeGPU(uint32_t arity, uint64_t *d_tree, uint64_t *d_input,
                          uint64_t nCols, uint64_t nRows, Layout layout, cudaStream_t stream);
 
@@ -441,7 +443,12 @@ __device__ __forceinline__ void spongeAbsorbTiled(const uint64_t *__restrict__ i
 // --- Kernel definitions ---
 
 // permuteKernel / compressKernel: single-element permutation on contiguous state.
-// MUST be launched with <<<1, 1>>> 
+// MUST be launched with <<<1, 1>>> — the shared-memory indexing
+// (i * blockDim.x + threadIdx.x) only produces correct contiguous access
+// when blockDim.x == 1. With multiple threads the kernel would read/write
+// in interleaved (SoA) strides, corrupting a contiguous input buffer.
+// For bulk work, use linearHash / merkletree which handle layout conversion
+// internally before calling poseidon2PermuteSmem.
 
 template<uint32_t RATE_T, uint32_t CAPACITY_T, uint32_t SPONGE_WIDTH_T, uint32_t N_FULL_ROUNDS_TOTAL_T, uint32_t N_PARTIAL_ROUNDS_T>
 __global__ void permuteKernel(uint64_t * output, const uint64_t * input){

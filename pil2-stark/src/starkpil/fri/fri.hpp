@@ -3,6 +3,7 @@
 
 #include "proof_stark.hpp"
 #include <cassert>
+#include <memory>
 #include <vector>
 #include "ntt_goldilocks.hpp"
 #include "merkleTreeGL.hpp"
@@ -50,6 +51,17 @@ void FRI<ElementType>::fold(uint64_t step, Goldilocks::Element* pol, Goldilocks:
     uint64_t nn = ((1 << polBits) / nX);
     u_int64_t maxth = omp_get_max_threads();
     if (maxth > nn) maxth = nn;
+
+    // Hoist the NTT_Goldilocks object out of the parallel region: nX is
+    // invariant across all g iterations inside this fold(), so constructing
+    // it per-group reallocates roots[]/powTwoInv[] every iter and recomputes
+    // the same powers. INTT reads those tables read-only, so the object is
+    // safe to share across threads. Only needed when step != 0.
+    std::unique_ptr<NTT_Goldilocks> ntt_hoisted;
+    if (step != 0) {
+        ntt_hoisted.reset(new NTT_Goldilocks(nX, 1));
+    }
+
 #pragma omp parallel num_threads(maxth)
     {
         u_int64_t nth = omp_get_num_threads();
@@ -71,7 +83,7 @@ void FRI<ElementType>::fold(uint64_t step, Goldilocks::Element* pol, Goldilocks:
         Goldilocks::Element aux = wi;
         Goldilocks::Element sinv_ = polShiftInv;
         for (uint64_t i = 0; i < chunk - 1; ++i) aux = aux * wi;
-        for (u_int64_t i = 0; i < thid; ++i) sinv_ = sinv_ * aux;   
+        for (u_int64_t i = 0; i < thid; ++i) sinv_ = sinv_ * aux;
         u_int64_t ncor = res;
         if (thid < res) ncor = thid;
         for (u_int64_t j = 0; j < ncor; ++j) sinv_ = sinv_ * wi;
@@ -82,14 +94,16 @@ void FRI<ElementType>::fold(uint64_t step, Goldilocks::Element* pol, Goldilocks:
                 Goldilocks::Element ppar[nX * FIELD_EXTENSION];
                 Goldilocks::Element ppar_c[nX * FIELD_EXTENSION];
 
-                #pragma omp parallel for
+                // Removed nested `#pragma omp parallel for`: we are already
+                // inside an outer omp parallel region, and OMP nested
+                // parallelism is disabled by default — the pragma was just
+                // dispatching overhead with no actual parallelism.
                 for (uint64_t i = 0; i < nX; i++)
                 {
                     std::memcpy(&ppar[i * FIELD_EXTENSION], &pol[((i * pol2N) + g) * FIELD_EXTENSION], FIELD_EXTENSION * sizeof(Goldilocks::Element));
                 }
-                NTT_Goldilocks ntt(nX, 1);
 
-                ntt.INTT(ppar_c, ppar, nX, FIELD_EXTENSION);
+                ntt_hoisted->INTT(ppar_c, ppar, nX, FIELD_EXTENSION);
                 polMulAxi(ppar_c, nX, sinv_); // Multiplies coefs by 1, shiftInv, shiftInv^2, shiftInv^3, ......
                 evalPol(pol, g, nX, ppar_c, challenge);
                 sinv_ = sinv_ * wi;
@@ -210,16 +224,25 @@ void FRI<ElementType>::getTransposed(Goldilocks::Element *aux, Goldilocks::Eleme
     uint64_t w = (1 << trasposeBits);
     uint64_t h = degree / w;
 
+    // Tiled transpose. The natural (i-outer, j-inner) loop strides reads by
+    // w*3 elements per j-step (e.g. 1.5 MB at w=65536 FRI shapes) — blows
+    // past every cache level. Processing a block of TILE_I consecutive i
+    // values with j as the middle loop makes reads contiguous per j-step
+    // (TILE_I*3 adjacent elements = 3 cache lines at TILE_I=64) while keeping
+    // writes small-strided within L1 (TILE_I*h*3*8 bytes well under 64 KB).
+    constexpr uint64_t TILE_I = 64;
 #pragma omp parallel for
-    for (uint64_t i = 0; i < w; i++)
+    for (uint64_t ib = 0; ib < w; ib += TILE_I)
     {
+        uint64_t ie = ib + TILE_I < w ? ib + TILE_I : w;
         for (uint64_t j = 0; j < h; j++)
         {
-
-            uint64_t fi = j * w + i;
-            uint64_t di = i * h + j;
-
-            std::memcpy(&aux[di * FIELD_EXTENSION], &pol[fi * FIELD_EXTENSION], FIELD_EXTENSION * sizeof(Goldilocks::Element));
+            for (uint64_t i = ib; i < ie; i++)
+            {
+                uint64_t fi = j * w + i;
+                uint64_t di = i * h + j;
+                std::memcpy(&aux[di * FIELD_EXTENSION], &pol[fi * FIELD_EXTENSION], FIELD_EXTENSION * sizeof(Goldilocks::Element));
+            }
         }
     }
 }

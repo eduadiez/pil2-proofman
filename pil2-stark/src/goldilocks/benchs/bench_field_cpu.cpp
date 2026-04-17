@@ -1,5 +1,12 @@
 #include <benchmark/benchmark.h>
 #include "../src/goldilocks_base_field.hpp"
+#include "../src/goldilocks_base_field_pack.hpp"
+#include "../src/goldilocks_cubic_extension.hpp"
+#include "../src/goldilocks_cubic_extension_pack.hpp"
+#include "../src/platform.hpp"
+#if PIL2_HAS_NEON
+#include "../src/goldilocks_neon.hpp"
+#endif
 #ifdef __AVX2__
 #include <immintrin.h>
 #endif
@@ -177,3 +184,124 @@ BENCHMARK(MUL_OP_BENCH)
 BENCHMARK(INV_OP_BENCH)
     ->Unit(benchmark::kMicrosecond)
     ->UseRealTime();
+
+// ---- op_pack microbenches (STARK expression-evaluator hot path) ----
+// NROWS_PACK=128 rows per call; run many calls per iteration to amortize loop.
+static constexpr uint64_t OP_PACK_N = 128;
+static constexpr uint64_t OP_PACK_CALLS = 10000;
+
+static void OP_PACK_ADD_BENCH(benchmark::State &state)
+{
+    alignas(16) Goldilocks::Element a[OP_PACK_N], b[OP_PACK_N], c[OP_PACK_N];
+    for (uint64_t i = 0; i < OP_PACK_N; ++i) { a[i].fe = i * 3 + 1; b[i].fe = i * 5 + 7; }
+    for (auto _ : state) {
+        for (uint64_t k = 0; k < OP_PACK_CALLS; ++k) {
+            Goldilocks::op_pack(OP_PACK_N, 0, c, a, false, b, false);
+            benchmark::DoNotOptimize(c);
+        }
+    }
+}
+static void OP_PACK_SUB_BENCH(benchmark::State &state)
+{
+    alignas(16) Goldilocks::Element a[OP_PACK_N], b[OP_PACK_N], c[OP_PACK_N];
+    for (uint64_t i = 0; i < OP_PACK_N; ++i) { a[i].fe = i * 3 + 1; b[i].fe = i * 5 + 7; }
+    for (auto _ : state) {
+        for (uint64_t k = 0; k < OP_PACK_CALLS; ++k) {
+            Goldilocks::op_pack(OP_PACK_N, 1, c, a, false, b, false);
+            benchmark::DoNotOptimize(c);
+        }
+    }
+}
+static void OP_PACK_MUL_BENCH(benchmark::State &state)
+{
+    alignas(16) Goldilocks::Element a[OP_PACK_N], b[OP_PACK_N], c[OP_PACK_N];
+    for (uint64_t i = 0; i < OP_PACK_N; ++i) { a[i].fe = i * 3 + 1; b[i].fe = i * 5 + 7; }
+    for (auto _ : state) {
+        for (uint64_t k = 0; k < OP_PACK_CALLS; ++k) {
+            Goldilocks::op_pack(OP_PACK_N, 2, c, a, false, b, false);
+            benchmark::DoNotOptimize(c);
+        }
+    }
+}
+
+BENCHMARK(OP_PACK_ADD_BENCH)->Unit(benchmark::kMicrosecond)->UseRealTime();
+BENCHMARK(OP_PACK_SUB_BENCH)->Unit(benchmark::kMicrosecond)->UseRealTime();
+BENCHMARK(OP_PACK_MUL_BENCH)->Unit(benchmark::kMicrosecond)->UseRealTime();
+
+// ---- Goldilocks3 (cubic extension) op_pack microbench ----
+// Each row does 6 field muls + ~12 adds/subs — heavier than base field op_pack.
+// Layout: a[0..N), a[N..2N), a[2N..3N) hold the 3 coordinates; same for b.
+static void OP_PACK_CUBIC_MUL_BENCH(benchmark::State &state)
+{
+    alignas(16) Goldilocks::Element a[3 * OP_PACK_N], b[3 * OP_PACK_N], c[3 * OP_PACK_N];
+    for (uint64_t i = 0; i < 3 * OP_PACK_N; ++i) { a[i].fe = i * 3 + 1; b[i].fe = i * 5 + 7; }
+    for (auto _ : state) {
+        for (uint64_t k = 0; k < OP_PACK_CALLS; ++k) {
+            Goldilocks3::op_pack(OP_PACK_N, 2, c, a, false, b, false);
+            benchmark::DoNotOptimize(c);
+        }
+    }
+}
+BENCHMARK(OP_PACK_CUBIC_MUL_BENCH)->Unit(benchmark::kMicrosecond)->UseRealTime();
+
+#if PIL2_HAS_NEON
+// Chained mul: each iter depends on the previous (FIB-like).
+// Scalar MUL_OP_BENCH does 1 mul per iter with dep chain → 1 mul per cycle
+// best case. NEON version keeps the same chain but computes 2 independent
+// chains in the 2 lanes → should be ~2× throughput if NEON really delivers
+// lane-parallelism when OoO can't help.
+static void MUL_OP_NEON_BENCH(benchmark::State &state)
+{
+    for (auto _ : state)
+    {
+        uint64x2_t term0 = vdupq_n_u64(2);
+        uint64x2_t term1 = vdupq_n_u64(3);
+        uint64x2_t term2 = vdupq_n_u64(0);
+        for (uint64_t i = 0; i < 1000000; i++)
+        {
+            term2 = Goldilocks_neon::gl_mul(term0, term1);
+            term0 = term1;
+            term1 = term2;
+        }
+        benchmark::DoNotOptimize(term2);
+    }
+}
+BENCHMARK(MUL_OP_NEON_BENCH)->Unit(benchmark::kMicrosecond)->UseRealTime();
+
+// Same chain as above but uses pure-NEON gl_mul_pure (no GP↔NEON shuttle).
+static void MUL_OP_NEON_PURE_BENCH(benchmark::State &state)
+{
+    for (auto _ : state)
+    {
+        uint64x2_t term0 = vdupq_n_u64(2);
+        uint64x2_t term1 = vdupq_n_u64(3);
+        uint64x2_t term2 = vdupq_n_u64(0);
+        for (uint64_t i = 0; i < 1000000; i++)
+        {
+            term2 = Goldilocks_neon::gl_mul_pure(term0, term1);
+            term0 = term1;
+            term1 = term2;
+        }
+        benchmark::DoNotOptimize(term2);
+    }
+}
+BENCHMARK(MUL_OP_NEON_PURE_BENCH)->Unit(benchmark::kMicrosecond)->UseRealTime();
+
+// Independent-iter throughput test: a[i] * b[i], no cross-iter deps.
+// If NEON pipes > scalar mul pipes for this op, we'd see pure-NEON win here.
+static void OP_PACK_MUL_NEON_PURE_BENCH(benchmark::State &state)
+{
+    alignas(16) Goldilocks::Element a[OP_PACK_N], b[OP_PACK_N], c[OP_PACK_N];
+    for (uint64_t i = 0; i < OP_PACK_N; ++i) { a[i].fe = i * 3 + 1; b[i].fe = i * 5 + 7; }
+    for (auto _ : state) {
+        for (uint64_t k = 0; k < OP_PACK_CALLS; ++k) {
+            for (uint64_t i = 0; i < OP_PACK_N; i += 2) {
+                Goldilocks_neon::store(&c[i], Goldilocks_neon::gl_mul_pure(
+                    Goldilocks_neon::load(&a[i]), Goldilocks_neon::load(&b[i])));
+            }
+            benchmark::DoNotOptimize(c);
+        }
+    }
+}
+BENCHMARK(OP_PACK_MUL_NEON_PURE_BENCH)->Unit(benchmark::kMicrosecond)->UseRealTime();
+#endif

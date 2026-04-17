@@ -14,10 +14,23 @@ ifeq ($(UNAME_S),Darwin)
     HOMEBREW_PREFIX := $(shell brew --prefix)
     CXX      = clang++
     SDKPATH  = /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk
-    CXXFLAGS = -std=c++17 -Wall -pthread -O3 -I./src -I$(HOMEBREW_PREFIX)/include -I$(HOMEBREW_PREFIX)/opt/libomp/include -isysroot $(SDKPATH) -Xpreprocessor -fopenmp
+    CXXFLAGS = -std=c++17 -Wall -pthread -O3 -I./src -I../bn128/src/ffiasm -I$(HOMEBREW_PREFIX)/include -I$(HOMEBREW_PREFIX)/opt/libomp/include -isysroot $(SDKPATH) -Xpreprocessor -fopenmp
     CPPFLAGS = -isysroot $(SDKPATH)
     LDFLAGS  = -L$(HOMEBREW_PREFIX)/lib -L$(HOMEBREW_PREFIX)/opt/libomp/lib -L$(SDKPATH)/usr/lib
-    LDLIBS   = -lomp -lbenchmark -lbenchmark_main -lgtest -lgtest_main -lgmpxx -lgmp -lpthread
+    LDLIBS_COMMON = -lomp -lgmpxx -lgmp -lpthread
+    LDLIBS_TEST   = $(LDLIBS_COMMON) -lgtest -lgtest_main
+    LDLIBS_BENCH  = $(LDLIBS_COMMON) -lbenchmark -lbenchmark_main
+
+    # bn128 CIOS Montgomery fallback — Darwin-only; provides the Fr_raw*
+    # symbols otherwise supplied by the .asm files (which we don't compile
+    # here). Linked into testscpu so test_bn128_fallback_cpu.cpp can verify
+    # the fallback against GMP as the oracle.
+    CIOS_OBJ := $(BUILD_DIR)/ffiasm_cios_montgomery.o
+    EXTRA_TEST_OBJS := $(CIOS_OBJ)
+
+    $(CIOS_OBJ): ../bn128/src/ffiasm/ffiasm_cios_montgomery.cpp
+		$(MKDIR_P) $(dir $@)
+		$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $< -o $@
 endif
 
 ifeq ($(UNAME_S),Linux)
@@ -73,6 +86,14 @@ TEST_OBJS  := $(patsubst $(TEST_DIR)/%.cpp, $(BUILD_DIR)/tests/%.o, $(TEST_SRCS)
 BENCH_SRCS := $(wildcard benchs/*_cpu.cpp)
 BENCH_OBJS := $(patsubst benchs/%.cpp, $(BUILD_DIR)/benchs/%.o, $(BENCH_SRCS))
 
+# Fallback: if no *_cpu.cpp files exist yet, use the legacy single-file names
+ifeq ($(TEST_SRCS),)
+  TEST_OBJS := $(BUILD_DIR)/tests/tests.o
+endif
+ifeq ($(BENCH_SRCS),)
+  BENCH_OBJS := $(BUILD_DIR)/benchs/bench.o
+endif
+
 ifeq ($(UNAME_S),Linux)
 GPU_SRC_OBJS := $(BUILD_DIR_GPU)/src/goldilocks_base_field.cpp.o \
                 $(BUILD_DIR_GPU)/src/ntt_goldilocks.cu.o \
@@ -85,6 +106,14 @@ GPU_TEST_SRCS := $(wildcard $(TEST_DIR)/*_gpu.cu)
 GPU_TEST_OBJS := $(patsubst $(TEST_DIR)/%.cu, $(BUILD_DIR_GPU)/tests/%.cu.o, $(GPU_TEST_SRCS))
 GPU_BENCH_SRCS := $(wildcard benchs/*_gpu.cu)
 GPU_BENCH_OBJS := $(patsubst benchs/%.cu, $(BUILD_DIR_GPU)/benchs/%.cu.o, $(GPU_BENCH_SRCS))
+
+# Fallback for legacy single-file GPU layout
+ifeq ($(GPU_TEST_SRCS),)
+  GPU_TEST_OBJS := $(BUILD_DIR_GPU)/tests/tests.cu.o
+endif
+ifeq ($(GPU_BENCH_SRCS),)
+  GPU_BENCH_OBJS := $(BUILD_DIR_GPU)/benchs/bench.cu.o
+endif
 endif
 
 # ----------------------
@@ -93,13 +122,13 @@ endif
 .PHONY: all testscpu benchscpu testsgpu benchsgpu clean help
 
 ifeq ($(UNAME_S),Linux)
-all: testscpu benchscpu testsgpu benchsgpu
+all: testscpu benchscpu
 else
 all: testscpu benchscpu
 endif
 
-testscpu: $(OBJS) $(TEST_OBJS)
-	$(CXX) $(OBJS) $(TEST_OBJS) $(LDFLAGS) $(LDLIBS_TEST) -o $@
+testscpu: $(OBJS) $(TEST_OBJS) $(EXTRA_TEST_OBJS)
+	$(CXX) $(OBJS) $(TEST_OBJS) $(EXTRA_TEST_OBJS) $(LDFLAGS) $(LDLIBS_TEST) -o $@
 
 benchscpu: $(BENCH_OBJS) $(OBJS)
 	$(CXX) $(BENCH_OBJS) $(OBJS) $(LDFLAGS) $(LDLIBS_BENCH) -o $@
@@ -133,6 +162,7 @@ $(BUILD_DIR_GPU)/%.cpp.o: %.cpp
 # ----------------------
 # Clean target
 # ----------------------
+.PHONY: clean
 clean:
 	rm -rf ./build testscpu benchscpu
 ifeq ($(UNAME_S),Linux)
@@ -142,16 +172,18 @@ endif
 # ----------------------
 # Help target
 # ----------------------
+.PHONY: help
 help:
 	@echo "make [target]"
-	@echo "  all (default) - Build all CPU (and GPU on Linux) binaries"
-	@echo "  testscpu      - Build the CPU test binary (scalar + AVX2 + AVX512 auto-detected)"
-	@echo "  benchscpu     - Build the CPU benchmark binary (Google Benchmark)"
-ifeq ($(UNAME_S),Linux)
-	@echo "  testsgpu      - Build the GPU test binary (CUDA, Linux only)"
-	@echo "  benchsgpu     - Build the GPU benchmark binary (CUDA, Linux only)"
-endif
 	@echo "  clean         - Remove build artifacts (CPU and, on Linux, GPU)"
+	@echo "  distclean     - Remove all build artifacts and backup files"
+	@echo "  all (default) - Build all CPU (and GPU on Linux) binaries"
+	@echo "  testscpu        - Build the CPU test binary (scalar + AVX2 + AVX512 auto-detected)"
+	@echo "  benchscpu       - Build the CPU benchmark binary (Google Benchmark)"
+ifeq ($(UNAME_S),Linux)
+	@echo "  testsgpu        - Build the GPU test binary (CUDA, Linux only)"
+	@echo "  benchsgpu       - Build the GPU benchmark binary (CUDA, Linux only)"
+endif
 
 -include $(DEPS)
 
