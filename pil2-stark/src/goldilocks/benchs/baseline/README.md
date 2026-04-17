@@ -8,6 +8,7 @@ Two reference files in this directory:
 | `apple-silicon-m4pro-scalar.txt` | macOS arm64, M4 Pro 14-core | After PR #465 bench reorg, before any NEON code lands | Scalar only (no AVX on Darwin, NEON not yet wired) |
 | `apple-silicon-m4pro-neon-w8.txt` | macOS arm64, M4 Pro 14-core | Part 5 Task 35 — NEON W=8 wired (naive per-lane gl_mul) | Scalar + NEON W=8 |
 | `apple-silicon-m4pro-neon-w8-paired.txt` | macOS arm64, M4 Pro 14-core | Part 5 Task 35.5 — paired-asm gl_mul | Scalar + NEON W=8 (paired) |
+| `apple-silicon-m4pro-neon-vectorized-add.txt` | macOS arm64, M4 Pro 14-core | Part 5 Task 38d — gl_add/gl_sub vectorised; matmul_external still punts | Scalar + NEON W=8/12/16 |
 
 The two files **cannot be row-compared by name** because PR #465 (`refactor:
 reorganize tests/benchmarks into per-area files`) renamed every benchmark
@@ -104,15 +105,30 @@ favor x86's deeper pipelines and x86 build's `__USE_ASSEMBLY__` codepath
 
 ## 3.5. W=8 NEON vs scalar — evolution across implementations
 
-| Bench | Scalar | NEON Task 35 (per-lane scalar) | NEON Task 35.5 (paired asm) |
-|---|---|---|---|
-| `PERMUTE_W8`  | 173-186 ms | 170 ms (parity) | 169-174 ms (~5% faster) |
-| `COMPRESS_W8` | 173-177 ms | 175 ms (parity) | 164-169 ms (~5% faster) |
+| Bench | Scalar | Task 35 (per-lane gl_mul) | Task 35.5 (paired-asm gl_mul) | Task 38d (+ vectorised gl_add/sub) |
+|---|---|---|---|---|
+| `PERMUTE_W8`  | 173-186 ms | 170 ms (parity) | 169-174 ms (~5% faster) | 184-188 ms (~parity) |
+| `COMPRESS_W8` | 173-177 ms | 175 ms (parity) | 164-169 ms (~5% faster) | 187 ms (~5% faster) |
+| `PERMUTE_W12` | 241-247 ms | n/a (W=8 only) | n/a (W=8 only) | 263-276 ms (**+9-15% slower**) |
+| `PERMUTE_W16` | 309-322 ms | n/a (W=8 only) | n/a (W=8 only) | 354-365 ms (**+12-18% slower**) |
 
-**Honest read:** Task 35.5's paired-asm `gl_mul` (manually interleaving
-the two lanes' `mul`+`umulh` to keep both Apple Silicon integer-mul pipes
-busy each cycle) gives a real but modest ~5% win, not the 1.5× the per-
-primitive theoretical maximum suggests. Reasons the win is small:
+**Honest read:**
+
+- W=8: NEON wins ~5% (from paired-asm `gl_mul`).
+- W=12 / W=16: NEON **loses 9-18%** because `matmul_external_neon` punts to
+  scalar (NEON-store / scalar-call / NEON-load round-trip per round). A first
+  attempt at vectorising the M4 with NEON gl_add + lane shuffles made things
+  ~14% worse — Apple Silicon has 8 integer ALUs vs 4 NEON ALUs, so scalar
+  add chains have more parallel headroom than NEON add chains for this kind
+  of cross-element add-heavy code. The shuffle ops (vextq, vzip) cost more
+  than they save.
+
+To avoid shipping a regression at the production widths, `Auto` resolution
+on Darwin is **restricted to Mode::Neon only at W=8**; W=12 and W=16 fall
+back to Scalar. Explicit `Mode::Neon` still works at all widths
+(correctness-gated by the W=12 / W=16 mode-equivalence tests).
+
+Reasons the W=8 win is small:
 
 1. The 22 partial rounds still extract NEON state to scalars, do the sum
    + state[0] arithmetic in scalar code, then reload — 22/(8+22) ≈ 73%

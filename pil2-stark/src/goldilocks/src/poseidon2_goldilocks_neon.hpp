@@ -173,24 +173,36 @@ inline uint64x2_t gl_square(uint64x2_t a) {
     return gl_mul(a, a);
 }
 
-// Modular add. NEON adds the lanes in parallel; canonicalisation is per-lane
-// scalar to avoid NEON's lack of a carry-out signal on vaddq_u64.
+// Modular add, fully vectorised. Bit-exact with scalar Goldilocks::add:
+//   1. Canonicalise a: if (a >= p) a -= p
+//   2. r = a + b
+//   3. Overflow correction: if (a > r) r -= p   (carry detection via vcgtq)
 inline uint64x2_t gl_add(uint64x2_t a, uint64x2_t b) {
-    uint64_t r0 = gl_add_scalar(vgetq_lane_u64(a, 0), vgetq_lane_u64(b, 0));
-    uint64_t r1 = gl_add_scalar(vgetq_lane_u64(a, 1), vgetq_lane_u64(b, 1));
-    uint64x2_t out = vdupq_n_u64(0);
-    out = vsetq_lane_u64(r0, out, 0);
-    out = vsetq_lane_u64(r1, out, 1);
-    return out;
+    const uint64x2_t p_vec = vdupq_n_u64(P);
+    // Step 1: canonicalise a
+    uint64x2_t a_ge_p = vcgeq_u64(a, p_vec);
+    a = vsubq_u64(a, vandq_u64(a_ge_p, p_vec));
+    // Step 2: add
+    uint64x2_t r = vaddq_u64(a, b);
+    // Step 3: overflow correction (vcgtq_u64(a, r) iff carry-out happened)
+    uint64x2_t overflow = vcgtq_u64(a, r);
+    return vsubq_u64(r, vandq_u64(overflow, p_vec));
 }
 
+// Modular sub, fully vectorised. Bit-exact with scalar Goldilocks::sub:
+//   1. Canonicalise b: if (b >= p) b -= p
+//   2. r = a - b
+//   3. Borrow correction: if (a < b) r += p
 inline uint64x2_t gl_sub(uint64x2_t a, uint64x2_t b) {
-    uint64_t r0 = gl_sub_scalar(vgetq_lane_u64(a, 0), vgetq_lane_u64(b, 0));
-    uint64_t r1 = gl_sub_scalar(vgetq_lane_u64(a, 1), vgetq_lane_u64(b, 1));
-    uint64x2_t out = vdupq_n_u64(0);
-    out = vsetq_lane_u64(r0, out, 0);
-    out = vsetq_lane_u64(r1, out, 1);
-    return out;
+    const uint64x2_t p_vec = vdupq_n_u64(P);
+    // Step 1: canonicalise b
+    uint64x2_t b_ge_p = vcgeq_u64(b, p_vec);
+    b = vsubq_u64(b, vandq_u64(b_ge_p, p_vec));
+    // Step 2: subtract
+    uint64x2_t r = vsubq_u64(a, b);
+    // Step 3: borrow correction (vcltq_u64(a, b) iff borrow-out)
+    uint64x2_t borrow = vcltq_u64(a, b);
+    return vaddq_u64(r, vandq_u64(borrow, p_vec));
 }
 
 }  // namespace Goldilocks_neon
@@ -232,6 +244,15 @@ inline void Poseidon2Goldilocks<SPONGE_WIDTH_T>::permute_neon(
     // template parameter into a free-function dispatch.
     constexpr uint32_t HALF_W = SPONGE_WIDTH >> 1;
 
+    // matmul_external punts to the scalar implementation: NEON-store,
+    // scalar-call, NEON-load. Tried a full NEON M4 + cross-chunk-sum
+    // vectorisation; the lane-shuffle overhead (vextq / vzip) made W=12 / W=16
+    // ~14% slower vs the punt. Apple Silicon has 8 integer ALUs vs 4 NEON
+    // ALUs, so scalar add chains have more parallel headroom than NEON gl_add
+    // chains for this kind of cross-element add-heavy code. Revisit if a
+    // chunked layout (lane 0 = chunk0 elem k, lane 1 = chunk1 elem k) is
+    // adopted across the whole permute — that would let M4 run truly in
+    // parallel across chunks without shuffles.
     auto matmul_external_neon = [](uint64x2_t st[HALF_W]) {
         Goldilocks::Element scratch[SPONGE_WIDTH];
         for (uint32_t i = 0; i < HALF_W; ++i)

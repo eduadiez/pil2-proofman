@@ -289,7 +289,12 @@ inline void Poseidon2Goldilocks<W>::permute(
 #if PIL2_HAS_AVX2
         mode = Poseidon2Mode::Avx;
 #elif PIL2_HAS_NEON
-        mode = Poseidon2Mode::Neon;
+        // NEON wins at W=8 (~5% on PERMUTE_W8) but regresses at W=12/W=16
+        // because matmul_external_neon punts to scalar and the per-call
+        // NEON-store / scalar / NEON-load overhead scales with W. Restrict
+        // Auto to W=8 until matmul_external_neon is properly vectorised.
+        // Explicit Mode::Neon still works for any W (correctness gated).
+        mode = (W == 8) ? Poseidon2Mode::Neon : Poseidon2Mode::Scalar;
 #else
         mode = Poseidon2Mode::Scalar;
 #endif
@@ -317,7 +322,8 @@ inline void Poseidon2Goldilocks<W>::compress(
 #if PIL2_HAS_AVX2
         mode = Poseidon2Mode::Avx;
 #elif PIL2_HAS_NEON
-        mode = Poseidon2Mode::Neon;
+        // See permute() Auto comment — restrict to W=8 until matmul wins.
+        mode = (W == 8) ? Poseidon2Mode::Neon : Poseidon2Mode::Scalar;
 #else
         mode = Poseidon2Mode::Scalar;
 #endif
@@ -343,7 +349,8 @@ inline void Poseidon2Goldilocks<W>::linearHash(
 #if PIL2_HAS_AVX2
         mode = Poseidon2Mode::Avx;
 #elif PIL2_HAS_NEON
-        mode = Poseidon2Mode::Neon;
+        // See permute() Auto comment — restrict to W=8 until matmul wins.
+        mode = (W == 8) ? Poseidon2Mode::Neon : Poseidon2Mode::Scalar;
 #else
         mode = Poseidon2Mode::Scalar;
 #endif
@@ -376,7 +383,10 @@ inline void Poseidon2Goldilocks<W>::merkletree(
 #elif PIL2_HAS_AVX2
         mode = Poseidon2Mode::AvxBatch;
 #elif PIL2_HAS_NEON
-        mode = Poseidon2Mode::Neon;  // single-sponge NEON; batched variant pending (Tasks 36-37)
+        // See permute() Auto comment — restrict to W=8. Production merkletree
+        // hot path is W=12 / W=16, which falls back to Scalar here until
+        // matmul_external_neon is properly vectorised.
+        mode = (W == 8) ? Poseidon2Mode::Neon : Poseidon2Mode::Scalar;
 #else
         mode = Poseidon2Mode::Scalar;
 #endif
