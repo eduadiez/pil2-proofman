@@ -12,7 +12,7 @@ void getPolynomial(SetupCtx& setupCtx, Goldilocks::Element *buffer, Goldilocks::
     uint64_t dim = polInfo.dim;
 #pragma omp parallel for
     for(uint64_t j = 0; j < deg; ++j) {
-        uint64_t l = (j + rowOffset)%deg;
+        uint64_t l = (j + rowOffset) & (deg - 1);  // deg = 1<<nBits, proven power of 2
         std::memcpy(&dest[j*dim], &buff[l*nCols], dim * sizeof(Goldilocks::Element));
     }
 }
