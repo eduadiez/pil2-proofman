@@ -4,11 +4,12 @@ Two reference files in this directory:
 
 | File | Host | When | Build mode |
 |---|---|---|---|
-| `zisk1.txt` | Linux x86_64, 32-core 5.7GHz | Before PR #465's bench reorg | Scalar + AVX + AVX-512 (multi-variant) |
-| `apple-silicon-m4pro-scalar.txt` | macOS arm64, M4 Pro 14-core | After PR #465 bench reorg, before any NEON code lands | Scalar only (no AVX on Darwin, NEON not yet wired) |
-| `apple-silicon-m4pro-neon-w8.txt` | macOS arm64, M4 Pro 14-core | Part 5 Task 35 — NEON W=8 wired (naive per-lane gl_mul) | Scalar + NEON W=8 |
-| `apple-silicon-m4pro-neon-w8-paired.txt` | macOS arm64, M4 Pro 14-core | Part 5 Task 35.5 — paired-asm gl_mul | Scalar + NEON W=8 (paired) |
-| `apple-silicon-m4pro-neon-vectorized-add.txt` | macOS arm64, M4 Pro 14-core | Part 5 Task 38d — gl_add/gl_sub vectorised; matmul_external still punts | Scalar + NEON W=8/12/16 |
+| `zisk1.txt` | Linux x86_64, 32-core 5.7GHz | Before PR #465's bench reorg | CPU: Scalar + AVX + AVX-512 (multi-variant) |
+| `zisk1_GPU.txt` | Linux x86_64 + NVIDIA CUDA | Before PR #465's bench reorg | GPU: NTT/INTT/LDE + LINEAR_HASH/MERKLETREE (TILES + ROWMAJOR) + GRINDING |
+| `apple-silicon-m4pro-scalar.txt` | macOS arm64, M4 Pro 14-core | After PR #465 bench reorg, before any NEON code lands | CPU: Scalar only (no AVX on Darwin, NEON not yet wired) |
+| `apple-silicon-m4pro-neon-w8.txt` | macOS arm64, M4 Pro 14-core | Part 5 Task 35 — NEON W=8 wired (naive per-lane gl_mul) | CPU: Scalar + NEON W=8 |
+| `apple-silicon-m4pro-neon-w8-paired.txt` | macOS arm64, M4 Pro 14-core | Part 5 Task 35.5 — paired-asm gl_mul | CPU: Scalar + NEON W=8 (paired) |
+| `apple-silicon-m4pro-neon-vectorized-add.txt` | macOS arm64, M4 Pro 14-core | Part 5 Task 38d — gl_add/gl_sub vectorised; matmul_external still punts | CPU: Scalar + NEON W=8/12/16 |
 
 The two files **cannot be row-compared by name** because PR #465 (`refactor:
 reorganize tests/benchmarks into per-area files`) renamed every benchmark
@@ -153,6 +154,35 @@ The path to a bigger win:
 
 These are queued as Phase B follow-ups, not blockers for the bit-exact
 gate.
+
+---
+
+## 3.6. CUDA reference (`zisk1_GPU.txt`) — what Metal needs to match
+
+The Linux CUDA build provides the GPU baseline. Selected headline rows
+(NUM_HASHES = 1<<23, ncols=24/36/56):
+
+| Row | /24 | /36 | /56 |
+|---|---|---|---|
+| `NTT_GPU_BENCH`                          |  10.5 ms |  15.7 ms |  24.4 ms |
+| `LDE_GPU_BENCH`                          |   7.8 ms |  11.6 ms |  18.1 ms |
+| `LINEAR_HASH_W12_TILES_GPU_BENCH`        |  18.9 ms |  31.4 ms |  44.0 ms |
+| `LINEAR_HASH_W16_TILES_GPU_BENCH`        |  17.1 ms |  25.6 ms |  42.5 ms |
+| `MERKLETREE_W12_AR3_TILES_GPU_BENCH`     |  22.2 ms |  34.7 ms |  47.4 ms |
+| `MERKLETREE_W16_AR4_TILES_GPU_BENCH`     |  19.9 ms |  28.5 ms |  45.5 ms |
+| `GRINDING_GPU_BENCH/24`                  |   7.4 ms |          |          |
+
+**Speedup vs CPU scalar**: ~25-50× for NTT/LDE; ~150-200× for merkletree
+operations. The CUDA path is what the Metal port (Parts 6-7) is targeting,
+not necessarily to match exactly but to land within the same order of
+magnitude. Note the `TILES` vs `ROWMAJOR` rows correspond to the
+`Layout::Tiles` / `Layout::RowMajor` enum that the Metal port mirrors
+(briefing CCD §22).
+
+The GPU bench file lives here even though the runner produces it on
+Linux — it is the cross-platform reference for GPU/Metal work and
+deserves to sit next to the CPU baselines for easy comparison once
+Metal benches start landing.
 
 ---
 
