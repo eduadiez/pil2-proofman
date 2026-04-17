@@ -3,6 +3,10 @@
 #include "../src/goldilocks_base_field_pack.hpp"
 #include "../src/goldilocks_cubic_extension.hpp"
 #include "../src/goldilocks_cubic_extension_pack.hpp"
+#include "../src/platform.hpp"
+#if PIL2_HAS_NEON
+#include "../src/goldilocks_neon.hpp"
+#endif
 #ifdef __AVX2__
 #include <immintrin.h>
 #endif
@@ -239,3 +243,28 @@ static void OP_PACK_CUBIC_MUL_BENCH(benchmark::State &state)
     }
 }
 BENCHMARK(OP_PACK_CUBIC_MUL_BENCH)->Unit(benchmark::kMicrosecond)->UseRealTime();
+
+#if PIL2_HAS_NEON
+// Chained mul: each iter depends on the previous (FIB-like).
+// Scalar MUL_OP_BENCH does 1 mul per iter with dep chain → 1 mul per cycle
+// best case. NEON version keeps the same chain but computes 2 independent
+// chains in the 2 lanes → should be ~2× throughput if NEON really delivers
+// lane-parallelism when OoO can't help.
+static void MUL_OP_NEON_BENCH(benchmark::State &state)
+{
+    for (auto _ : state)
+    {
+        uint64x2_t term0 = vdupq_n_u64(2);
+        uint64x2_t term1 = vdupq_n_u64(3);
+        uint64x2_t term2 = vdupq_n_u64(0);
+        for (uint64_t i = 0; i < 1000000; i++)
+        {
+            term2 = Goldilocks_neon::gl_mul(term0, term1);
+            term0 = term1;
+            term1 = term2;
+        }
+        benchmark::DoNotOptimize(term2);
+    }
+}
+BENCHMARK(MUL_OP_NEON_BENCH)->Unit(benchmark::kMicrosecond)->UseRealTime();
+#endif
