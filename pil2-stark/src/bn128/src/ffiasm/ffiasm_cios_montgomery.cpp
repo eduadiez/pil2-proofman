@@ -236,10 +236,26 @@ extern "C" void Fr_rawMSquare(FrRawElement r, const FrRawElement a) {
     Fr_rawMMul(r, a, a);
 }
 
-// ---- Stubs still pending (Task 21) ---------------------------------------
+// Scalar-by-vector Montgomery multiply: r = a * b * R^-1 mod p, with b a
+// 64-bit scalar. Promote b to a 4-limb operand and reuse Fr_rawMMul; a
+// dedicated scalar-times-vector inner loop would be ~1.5x faster but the
+// trivial path keeps the surface area small.
+extern "C" void Fr_rawMMul1(FrRawElement r, const FrRawElement a, uint64_t b) {
+    const uint64_t bvec[Fr_N64] = {b, 0, 0, 0};
+    Fr_rawMMul(r, a, bvec);
+}
 
-extern "C" void Fr_rawMMul1(FrRawElement, const FrRawElement, uint64_t)                               { Fr_cios_stub("Fr_rawMMul1"); }
-extern "C" void Fr_rawToMontgomery(FrRawElement, const FrRawElement&)                                 { Fr_cios_stub("Fr_rawToMontgomery"); }
-extern "C" void Fr_rawFromMontgomery(FrRawElement, const FrRawElement&)                               { Fr_cios_stub("Fr_rawFromMontgomery"); }
+// To Montgomery form: r = a * R mod p.
+//   MMul(a, R^2) = a * R^2 * R^-1 = a * R    ✓
+extern "C" void Fr_rawToMontgomery(FrRawElement r, const FrRawElement &a) {
+    Fr_rawMMul(r, a, Fr_R2);
+}
+
+// From Montgomery form: r = a * R^-1 mod p.
+//   MMul(a, 1) = a * 1 * R^-1 = a * R^-1     ✓
+extern "C" void Fr_rawFromMontgomery(FrRawElement r, const FrRawElement &a) {
+    static const uint64_t one[Fr_N64] = {1, 0, 0, 0};
+    Fr_rawMMul(r, a, one);
+}
 
 #endif // __USE_ASSEMBLY__

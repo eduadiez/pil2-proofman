@@ -247,6 +247,57 @@ TEST(Fr_rawMSquare, matches_MMul_with_self) {
     }
 }
 
+TEST(Fr_rawMMul1, matches_MMul_with_promoted_scalar) {
+    const uint64_t scalars[] = {0, 1, 2, 0xffffffffffffffffULL,
+                                0xdeadbeefcafef00dULL};
+    for (uint64_t k : scalars) {
+        for (int i = 0; i < N_SAMPLES; i++) {
+            FrRawElement a, r1, r2;
+            from_mpz(a, sample(i));
+            Fr_rawMMul1(r1, a, k);
+            FrRawElement bvec = {k, 0, 0, 0};
+            Fr_rawMMul(r2, a, bvec);
+            EXPECT_EQ(to_mpz(r1), to_mpz(r2))
+                << "scalar=0x" << std::hex << k << " sample " << std::dec << i;
+        }
+    }
+}
+
+TEST(Fr_rawToMontgomery, scales_by_R_mod_p) {
+    const mpz_class p = fr_modulus();
+    const mpz_class R = mpz_class(1) << 256;
+    for (int i = 0; i < N_SAMPLES; i++) {
+        FrRawElement a, r;
+        from_mpz(a, sample(i));
+        Fr_rawToMontgomery(r, a);
+        EXPECT_EQ(to_mpz(r), (sample(i) * R) % p) << "sample " << i;
+    }
+}
+
+TEST(Fr_rawFromMontgomery, scales_by_R_inv_mod_p) {
+    const mpz_class p = fr_modulus();
+    const mpz_class R_inv = fr_R_inv();
+    for (int i = 0; i < N_SAMPLES; i++) {
+        FrRawElement a, r;
+        from_mpz(a, sample(i));
+        Fr_rawFromMontgomery(r, a);
+        EXPECT_EQ(to_mpz(r), (sample(i) * R_inv) % p) << "sample " << i;
+    }
+}
+
+// Gold-standard roundtrip: every Montgomery setup has to satisfy this
+// or nothing else works. If any of the constants (Fr_rawq, Fr_R2, FR_N0)
+// or any inner CIOS step is off by a bit, this catches it.
+TEST(Fr_montgomery_roundtrip, fromMont_of_toMont_is_identity) {
+    for (int i = 0; i < N_SAMPLES; i++) {
+        FrRawElement a, mont, back;
+        from_mpz(a, sample(i));
+        Fr_rawToMontgomery(mont, a);
+        Fr_rawFromMontgomery(back, mont);
+        EXPECT_EQ(to_mpz(back), sample(i)) << "sample " << i;
+    }
+}
+
 TEST(Fr_rawAdd, edge_cases_around_modulus) {
     const mpz_class p = fr_modulus();
     FrRawElement a, b, r;
