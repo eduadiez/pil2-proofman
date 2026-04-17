@@ -9,6 +9,9 @@
 #if PIL2_HAS_AVX2
 #include <immintrin.h>
 #endif
+#if PIL2_HAS_NEON
+#include <arm_neon.h>
+#endif
 
 #define HASH_SIZE 4
 
@@ -374,6 +377,8 @@ inline void Poseidon2Goldilocks<W>::merkletree(
 #if PIL2_HAS_AVX512
  #include "poseidon2_goldilocks_avx512.hpp"
  #endif
+
+#include "poseidon2_goldilocks_neon.hpp"
 
 using Poseidon2GoldilocksGrinding = Poseidon2Goldilocks<4>;  // SPONGE_WIDTH = 4
 
