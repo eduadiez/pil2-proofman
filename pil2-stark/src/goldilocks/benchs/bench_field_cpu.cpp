@@ -1,6 +1,8 @@
 #include <benchmark/benchmark.h>
 #include "../src/goldilocks_base_field.hpp"
 #include "../src/goldilocks_base_field_pack.hpp"
+#include "../src/goldilocks_cubic_extension.hpp"
+#include "../src/goldilocks_cubic_extension_pack.hpp"
 #ifdef __AVX2__
 #include <immintrin.h>
 #endif
@@ -221,3 +223,19 @@ static void OP_PACK_MUL_BENCH(benchmark::State &state)
 BENCHMARK(OP_PACK_ADD_BENCH)->Unit(benchmark::kMicrosecond)->UseRealTime();
 BENCHMARK(OP_PACK_SUB_BENCH)->Unit(benchmark::kMicrosecond)->UseRealTime();
 BENCHMARK(OP_PACK_MUL_BENCH)->Unit(benchmark::kMicrosecond)->UseRealTime();
+
+// ---- Goldilocks3 (cubic extension) op_pack microbench ----
+// Each row does 6 field muls + ~12 adds/subs — heavier than base field op_pack.
+// Layout: a[0..N), a[N..2N), a[2N..3N) hold the 3 coordinates; same for b.
+static void OP_PACK_CUBIC_MUL_BENCH(benchmark::State &state)
+{
+    alignas(16) Goldilocks::Element a[3 * OP_PACK_N], b[3 * OP_PACK_N], c[3 * OP_PACK_N];
+    for (uint64_t i = 0; i < 3 * OP_PACK_N; ++i) { a[i].fe = i * 3 + 1; b[i].fe = i * 5 + 7; }
+    for (auto _ : state) {
+        for (uint64_t k = 0; k < OP_PACK_CALLS; ++k) {
+            Goldilocks3::op_pack(OP_PACK_N, 2, c, a, false, b, false);
+            benchmark::DoNotOptimize(c);
+        }
+    }
+}
+BENCHMARK(OP_PACK_CUBIC_MUL_BENCH)->Unit(benchmark::kMicrosecond)->UseRealTime();
