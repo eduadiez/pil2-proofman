@@ -88,6 +88,20 @@ TEST(Goldilocks_neon, gl_mul_matches_scalar_random_sweep) {
     }
 }
 
+TEST(Goldilocks_neon, gl_mul_pure_matches_gl_mul_random_sweep) {
+    auto rng = make_rng(0xDEADF00D);
+    for (int iter = 0; iter < 1024; ++iter) {
+        uint64_t a0 = random_field(rng), a1 = random_field(rng);
+        uint64_t b0 = random_field(rng), b1 = random_field(rng);
+        uint64x2_t va = vsetq_lane_u64(a1, vsetq_lane_u64(a0, vdupq_n_u64(0), 0), 1);
+        uint64x2_t vb = vsetq_lane_u64(b1, vsetq_lane_u64(b0, vdupq_n_u64(0), 0), 1);
+        uint64x2_t vr_asm  = Goldilocks_neon::gl_mul(va, vb);
+        uint64x2_t vr_pure = Goldilocks_neon::gl_mul_pure(va, vb);
+        EXPECT_EQ(vgetq_lane_u64(vr_asm, 0), vgetq_lane_u64(vr_pure, 0)) << "lane 0 iter " << iter;
+        EXPECT_EQ(vgetq_lane_u64(vr_asm, 1), vgetq_lane_u64(vr_pure, 1)) << "lane 1 iter " << iter;
+    }
+}
+
 TEST(Goldilocks_neon, gl_add_modulus_boundary_matches_scalar) {
     // Each case checks that NEON gl_add returns the exact same representation
     // as scalar Goldilocks::add — including non-canonical results (the scalar

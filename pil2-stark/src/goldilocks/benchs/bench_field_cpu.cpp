@@ -267,4 +267,41 @@ static void MUL_OP_NEON_BENCH(benchmark::State &state)
     }
 }
 BENCHMARK(MUL_OP_NEON_BENCH)->Unit(benchmark::kMicrosecond)->UseRealTime();
+
+// Same chain as above but uses pure-NEON gl_mul_pure (no GP↔NEON shuttle).
+static void MUL_OP_NEON_PURE_BENCH(benchmark::State &state)
+{
+    for (auto _ : state)
+    {
+        uint64x2_t term0 = vdupq_n_u64(2);
+        uint64x2_t term1 = vdupq_n_u64(3);
+        uint64x2_t term2 = vdupq_n_u64(0);
+        for (uint64_t i = 0; i < 1000000; i++)
+        {
+            term2 = Goldilocks_neon::gl_mul_pure(term0, term1);
+            term0 = term1;
+            term1 = term2;
+        }
+        benchmark::DoNotOptimize(term2);
+    }
+}
+BENCHMARK(MUL_OP_NEON_PURE_BENCH)->Unit(benchmark::kMicrosecond)->UseRealTime();
+
+// Independent-iter throughput test: a[i] * b[i], no cross-iter deps.
+// If NEON pipes > scalar mul pipes for this op, we'd see pure-NEON win here.
+static void OP_PACK_MUL_NEON_PURE_BENCH(benchmark::State &state)
+{
+    alignas(16) Goldilocks::Element a[OP_PACK_N], b[OP_PACK_N], c[OP_PACK_N];
+    for (uint64_t i = 0; i < OP_PACK_N; ++i) { a[i].fe = i * 3 + 1; b[i].fe = i * 5 + 7; }
+    for (auto _ : state) {
+        for (uint64_t k = 0; k < OP_PACK_CALLS; ++k) {
+            for (uint64_t i = 0; i < OP_PACK_N; i += 2) {
+                Goldilocks_neon::store(&c[i], Goldilocks_neon::gl_mul_pure(
+                    Goldilocks_neon::load(&a[i]), Goldilocks_neon::load(&b[i])));
+            }
+            benchmark::DoNotOptimize(c);
+        }
+    }
+}
+BENCHMARK(OP_PACK_MUL_NEON_PURE_BENCH)->Unit(benchmark::kMicrosecond)->UseRealTime();
 #endif

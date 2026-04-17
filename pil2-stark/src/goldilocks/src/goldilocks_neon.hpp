@@ -177,6 +177,81 @@ inline uint64x2_t gl_square(uint64x2_t a) {
     return gl_mul(a, a);
 }
 
+// ----------------------------------------------------------------------------
+// Pure-NEON gl_mul — stays in NEON regs end-to-end, NO GP↔NEON fmov shuttles.
+//
+// Our asm-based gl_mul is scalar mul+umulh paired across 2 lanes via
+// vgetq_lane (fmov NEON→GP ~3-4 cyc) / vsetq_lane (fmov GP→NEON ~3-4 cyc).
+// For independent-iter kernels, Apple's OoO hides the shuttle cost; for
+// dep-chained kernels, the shuttles stack serially and make NEON 2.7×
+// slower than scalar (see MUL_OP_NEON_BENCH vs MUL_OP_BENCH, commit d43bc24c).
+//
+// This variant does the 64×64→128 multiply via 4× vmull_u32 (32×32→64
+// widening) + intrinsic combine, then the same Goldilocks reduction using
+// vandq/vshlq/vsubq/vaddq/vcltq/vcgtq/vandq. No cross-pipe moves.
+//
+// Goldilocks reduction (bit-identical to the asm path):
+//   c = a * b  (128 bits)
+//   c_hi_lo = c_hi & 0xFFFFFFFF,  c_hi_hi = c_hi >> 32
+//   t  = c_lo - c_hi_hi  (+EPS on borrow)
+//   he = c_hi_lo * EPS = (c_hi_lo << 32) - c_hi_lo
+//   r  = t + he         (+EPS on carry)
+// Output non-canonical in [0, 2^64).
+inline uint64x2_t gl_mul_pure(uint64x2_t a, uint64x2_t b) {
+    const uint64x2_t EPS = vdupq_n_u64(0xFFFFFFFFULL);
+    const uint64x2_t ONE_SHIFT_32 = vdupq_n_u64(1ULL << 32);
+
+    // Extract 32-bit halves of each u64 lane (as uint32x2_t).
+    uint32x2_t a_lo = vmovn_u64(a);
+    uint32x2_t a_hi = vshrn_n_u64(a, 32);
+    uint32x2_t b_lo = vmovn_u64(b);
+    uint32x2_t b_hi = vshrn_n_u64(b, 32);
+
+    // Four widening 32×32 → 64 multiplies per lane pair.
+    uint64x2_t ll = vmull_u32(a_lo, b_lo);
+    uint64x2_t lh = vmull_u32(a_lo, b_hi);
+    uint64x2_t hl = vmull_u32(a_hi, b_lo);
+    uint64x2_t hh = vmull_u32(a_hi, b_hi);
+
+    // mid = lh + hl  (65-bit result; carry tracked).
+    uint64x2_t mid = vaddq_u64(lh, hl);
+    uint64x2_t mid_carry_mask = vcltq_u64(mid, lh);            // all-ones on overflow
+    uint64x2_t mid_carry_contrib = vandq_u64(mid_carry_mask, ONE_SHIFT_32);  // 2^32 if overflowed
+
+    // c_lo = ll + (mid << 32), carry tracked.
+    uint64x2_t mid_lo_shifted = vshlq_n_u64(mid, 32);
+    uint64x2_t c_lo = vaddq_u64(ll, mid_lo_shifted);
+    uint64x2_t c_lo_carry_mask = vcltq_u64(c_lo, ll);
+    uint64x2_t c_lo_carry_bit = vandq_u64(c_lo_carry_mask, vdupq_n_u64(1));
+
+    // c_hi = hh + (mid >> 32) + c_lo_carry + mid_carry*2^32
+    uint64x2_t mid_hi_shifted = vshrq_n_u64(mid, 32);
+    uint64x2_t c_hi = vaddq_u64(hh, mid_hi_shifted);
+    c_hi = vaddq_u64(c_hi, c_lo_carry_bit);
+    c_hi = vaddq_u64(c_hi, mid_carry_contrib);
+
+    // Goldilocks reduction.
+    uint64x2_t c_hi_lo = vandq_u64(c_hi, EPS);
+    uint64x2_t c_hi_hi = vshrq_n_u64(c_hi, 32);
+
+    // t = c_lo - c_hi_hi  (-EPS on borrow)
+    uint64x2_t t = vsubq_u64(c_lo, c_hi_hi);
+    uint64x2_t t_borrow = vcgtq_u64(c_hi_hi, c_lo);
+    t = vsubq_u64(t, vandq_u64(t_borrow, EPS));
+
+    // he = (c_hi_lo << 32) - c_hi_lo
+    uint64x2_t he = vsubq_u64(vshlq_n_u64(c_hi_lo, 32), c_hi_lo);
+
+    // r = t + he  (+EPS on carry)
+    uint64x2_t r = vaddq_u64(t, he);
+    uint64x2_t r_carry = vcltq_u64(r, t);
+    return vaddq_u64(r, vandq_u64(r_carry, EPS));
+}
+
+inline uint64x2_t gl_square_pure(uint64x2_t a) {
+    return gl_mul_pure(a, a);
+}
+
 // Specialised add for when ONE operand is known canonical (< p). The other
 // operand may be non-canonical in [0, 2^64). Skips the pre-canonicalise of
 // `a` that the general gl_add needs to keep itself to a single overflow
