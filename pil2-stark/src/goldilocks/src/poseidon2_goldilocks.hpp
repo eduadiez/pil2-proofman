@@ -147,6 +147,13 @@ private:
                                         uint64_t num_cols, uint64_t num_rows, uint64_t arity,
                                         int nThreads = 0, uint64_t dim = 1);
 #endif
+#if PIL2_HAS_NEON
+    // NEON single-sponge (Part 5). 2 elements per uint64x2_t — state of W
+    // elements lives in W/2 NEON registers. Bodies in poseidon2_goldilocks_neon.hpp.
+    static void permute_neon(Goldilocks::Element *, const Goldilocks::Element *);
+    static void compress_neon(Goldilocks::Element (&state)[CAPACITY],
+                          const Goldilocks::Element (&input)[SPONGE_WIDTH]);
+#endif
 
 };
 
@@ -286,6 +293,9 @@ inline void Poseidon2Goldilocks<W>::permute(
 #if PIL2_HAS_AVX2
         case Poseidon2Mode::Avx:    permute_avx(output, input); return;
 #endif
+#if PIL2_HAS_NEON
+        case Poseidon2Mode::Neon:   permute_neon(output, input); return;
+#endif
         default: break;
     }
     abortMode("permute", mode);
@@ -308,6 +318,9 @@ inline void Poseidon2Goldilocks<W>::compress(
         case Poseidon2Mode::Scalar: compress_seq(state, input); return;
 #if PIL2_HAS_AVX2
         case Poseidon2Mode::Avx:    compress_avx(state, input); return;
+#endif
+#if PIL2_HAS_NEON
+        case Poseidon2Mode::Neon:   compress_neon(state, input); return;
 #endif
         default: break;
     }
