@@ -1,0 +1,57 @@
+Unable to determine clock rate from sysctl: hw.cpufrequency: No such file or directory
+This does not affect benchmark measurements, only the metadata output.
+***WARNING*** Failed to set thread affinity. Estimated CPU frequency may be incorrect.
+2026-04-17T09:49:08+02:00
+Running /Users/edu/Development/pil2-proofman/pil2-stark/src/goldilocks/benchscpu
+Run on (14 X 24 MHz CPU s)
+CPU Caches:
+  L1 Data 64 KiB
+  L1 Instruction 128 KiB
+  L2 Unified 4096 KiB (x14)
+Load Average: 4.36, 4.98, 6.98
+-------------------------------------------------------------------------------------------
+Benchmark                                                 Time             CPU   Iterations
+-------------------------------------------------------------------------------------------
+ADD_OP_BENCH/real_time                                  682 us          682 us         2053
+SUB_OP_BENCH/real_time                                 1129 us         1129 us         1240
+MUL_OP_BENCH/real_time                                 1968 us         1899 us          738
+INV_OP_BENCH/real_time                                11180 us        11147 us          110
+NTT_CPU_BENCH/24/real_time                              243 ms          164 ms            5
+NTT_CPU_BENCH/36/real_time                              309 ms          224 ms            4
+NTT_CPU_BENCH/56/real_time                              461 ms          313 ms            3
+INTT_CPU_BENCH/24/real_time                             251 ms          166 ms            6
+INTT_CPU_BENCH/36/real_time                             332 ms          229 ms            4
+INTT_CPU_BENCH/56/real_time                             474 ms          349 ms            3
+LDE_CPU_BENCH/24/real_time                              302 ms          194 ms            5
+LDE_CPU_BENCH/36/real_time                              398 ms          262 ms            4
+LDE_CPU_BENCH/56/real_time                              557 ms          389 ms            2
+PERMUTE_W8_SCALAR_CPU_BENCH/real_time                   187 ms          131 ms            8
+PERMUTE_W12_SCALAR_CPU_BENCH/real_time                  260 ms          174 ms            6
+PERMUTE_W16_SCALAR_CPU_BENCH/real_time                  297 ms          236 ms            4
+COMPRESS_W4_SCALAR_CPU_BENCH/real_time                  111 ms         83.1 ms           13
+COMPRESS_W8_SCALAR_CPU_BENCH/real_time                  180 ms          131 ms            8
+COMPRESS_W12_SCALAR_CPU_BENCH/real_time                 237 ms          185 ms            6
+COMPRESS_W16_SCALAR_CPU_BENCH/real_time                 303 ms          235 ms            4
+LINEAR_HASH_W8_SCALAR_CPU_BENCH/24/real_time           4321 ms         3172 ms            1
+LINEAR_HASH_W8_SCALAR_CPU_BENCH/36/real_time           6119 ms         4871 ms            1
+LINEAR_HASH_W8_SCALAR_CPU_BENCH/56/real_time           9288 ms         7751 ms            1
+LINEAR_HASH_W12_SCALAR_CPU_BENCH/24/real_time          2701 ms         2228 ms            1
+LINEAR_HASH_W12_SCALAR_CPU_BENCH/36/real_time          4531 ms         3672 ms            1
+LINEAR_HASH_W12_SCALAR_CPU_BENCH/56/real_time          6212 ms         5176 ms            1
+LINEAR_HASH_W16_SCALAR_CPU_BENCH/24/real_time          2361 ms         1930 ms            1
+LINEAR_HASH_W16_SCALAR_CPU_BENCH/36/real_time          3502 ms         2929 ms            1
+LINEAR_HASH_W16_SCALAR_CPU_BENCH/56/real_time          5726 ms         4873 ms            1
+MERKLETREE_W8_AR2_SCALAR_CPU_BENCH/24/real_time        4593 ms         3827 ms            1
+MERKLETREE_W8_AR2_SCALAR_CPU_BENCH/36/real_time        6646 ms         5625 ms            1
+MERKLETREE_W8_AR2_SCALAR_CPU_BENCH/56/real_time        9855 ms         8262 ms            1
+MERKLETREE_W12_AR3_SCALAR_CPU_BENCH/24/real_time       3156 ms         2594 ms            1
+MERKLETREE_W12_AR3_SCALAR_CPU_BENCH/36/real_time       4825 ms         3993 ms            1
+MERKLETREE_W12_AR3_SCALAR_CPU_BENCH/56/real_time       6562 ms         5525 ms            1
+MERKLETREE_W16_AR4_SCALAR_CPU_BENCH/24/real_time       2814 ms         2307 ms            1
+MERKLETREE_W16_AR4_SCALAR_CPU_BENCH/36/real_time       3942 ms         3180 ms            1
+MERKLETREE_W16_AR4_SCALAR_CPU_BENCH/56/real_time       6159 ms         5215 ms            1
+GRINDING_CPU_BENCH/20/real_time                        86.0 ms         46.0 ms           23
+GRINDING_CPU_BENCH/21/real_time                         124 ms         66.1 ms           13
+GRINDING_CPU_BENCH/22/real_time                         193 ms          103 ms            6
+GRINDING_CPU_BENCH/24/real_time                         359 ms          191 ms            4
+GRINDING_CPU_BENCH/25/real_time                        2123 ms         1132 ms            1

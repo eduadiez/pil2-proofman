@@ -206,12 +206,23 @@ void Starks<ElementType>::computeQ(uint64_t step, Goldilocks::Element *buffer, F
         S[i] = Goldilocks::mul(S[i - 1], shiftIn);
     }
 
-#pragma omp parallel for collapse(2)
-    for (uint64_t p = 0; p < setupCtx.starkInfo.qDeg; p++)
-    {   
-        for(uint64_t i = 0; i < N; i++)
-        { 
-            Goldilocks3::mul((Goldilocks3::Element &)cmQ[(i * setupCtx.starkInfo.qDeg + p) * FIELD_EXTENSION], (Goldilocks3::Element &)buffer[setupCtx.starkInfo.mapOffsets[std::make_pair("q", true)] + (p * N + i) * FIELD_EXTENSION], S[p]);
+    // Loop-swap: i-outer / p-inner makes the WRITES to cmQ contiguous per
+    // thread (stride FIELD_EXTENSION instead of qDeg*FIELD_EXTENSION), which
+    // the M-series store path handles much better than strided writes. Reads
+    // become strided (stride N*FIELD_EXTENSION) but that's prefetcher-friendly.
+    // Dropped collapse(2): with N >> qDeg (typical nBitsExt >> 2), parallelising
+    // only over i already provides ample work per thread.
+    const uint64_t q_offset = setupCtx.starkInfo.mapOffsets[std::make_pair("q", true)];
+    const uint64_t qDeg = setupCtx.starkInfo.qDeg;
+#pragma omp parallel for
+    for (uint64_t i = 0; i < N; i++)
+    {
+        for (uint64_t p = 0; p < qDeg; p++)
+        {
+            Goldilocks3::mul(
+                (Goldilocks3::Element &)cmQ[(i * qDeg + p) * FIELD_EXTENSION],
+                (Goldilocks3::Element &)buffer[q_offset + (p * N + i) * FIELD_EXTENSION],
+                S[p]);
         }
     }
 

@@ -93,6 +93,7 @@ fn main() {
     }
 
     // Write stamps after make succeeds (make creates the output directory).
+    // Always write so stamps stay current even when content hasn't changed.
     if cfg!(feature = "gpu") {
         if let Err(e) = fs::write(&archs_stamp_path, stamp_content) {
             eprintln!(

@@ -1,4 +1,9 @@
 #include "ntt_goldilocks.hpp"
+#include "platform.hpp"
+#include <memory>
+#if PIL2_HAS_NEON
+#include "ntt_goldilocks_neon.hpp"
+#endif
 
 //Explicar extend parameter
 //Explicar inverse parameter
@@ -6,11 +11,20 @@
 
 static inline uint64_t BR(uint64_t x, uint64_t domainPow)
 {
+#if defined(__aarch64__)
+    // aarch64 has a single-instruction bit reversal (RBIT). clang's
+    // __builtin_bitreverse32 lowers to `rbit w_reg, w_reg` (1-2 cycles)
+    // — replaces the 10+ ops of the portable shift-mask sequence below.
+    // Bit-identical semantics: reverse low 32 bits, then shift down to
+    // keep the top `domainPow` bits of the reversed value.
+    return (uint64_t)(__builtin_bitreverse32((uint32_t)x)) >> (32 - domainPow);
+#else
     x = (x >> 16) | (x << 16);                              //swaps 32bit halves of x
     x = ((x & 0xFF00FF00) >> 8) | ((x & 0x00FF00FF) << 8);  //swaps 16bit halves of 32bit halves
     x = ((x & 0xF0F0F0F0) >> 4) | ((x & 0x0F0F0F0F) << 4);  //swaps 8bit halves of 16bit halves
     x = ((x & 0xCCCCCCCC) >> 2) | ((x & 0x33333333) << 2);  //swaps 4bit halves of 8bit halves
     return (((x & 0xAAAAAAAA) >> 1) | ((x & 0x55555555) << 1)) >> (32 - domainPow); //swaps 2bit halves of 4bit halves
+#endif
 }
 
 /**
@@ -113,6 +127,7 @@ void NTT_Goldilocks::NTT_iters(Goldilocks::Element *dst, Goldilocks::Element *sr
             chunk1 = 1;
         }
 
+        // ----- Phase A: butterflies (in-place on a) -----
 #pragma omp parallel for schedule(static, chunk1)
         for (uint64_t b = 0; b < nBatches; b++)
         {
@@ -135,6 +150,9 @@ void NTT_Goldilocks::NTT_iters(Goldilocks::Element *dst, Goldilocks::Element *sr
                     j = j % mdiv2;
 
                     Goldilocks::Element w = root(s + si, j);
+#if PIL2_HAS_NEON
+                    ntt_neon_butterfly(a, offset1, offset2, w, ncols);
+#else
                     for (uint64_t k = 0; k < ncols; ++k)
                     {
                         Goldilocks::Element t = w * a[offset1 + k];
@@ -143,47 +161,84 @@ void NTT_Goldilocks::NTT_iters(Goldilocks::Element *dst, Goldilocks::Element *sr
                         Goldilocks::add(a[offset2 + k], t, u);
                         Goldilocks::sub(a[offset1 + k], u, t);
                     }
+#endif
                 }
             }
-            if (s + maxBatchPow <= domainPow || !inverse)
+        }
+
+        // ----- Phase B: reorganize a → a2 for next NTT phase -----
+        // Split from the butterfly phase so the copy can use a different
+        // (cache-friendly) loop structure. The implicit barrier at the end
+        // of the butterfly `omp parallel for` ensures all writes to `a` are
+        // visible before any thread reads `a` in the copy phase.
+        if (s + maxBatchPow <= domainPow || !inverse)
+        {
+            // Normal phase (not-last or not-inverse): tile over b to make
+            // writes to a2 contiguous within a tile. Original pattern was:
+            //   for b { for x in 0..batchSize { memcpy stride nBatches } }
+            // → batchSize strided writes per b (stride nBatches * ncols).
+            // Tiled variant:
+            //   for b_block step TILE_B { for x { for b in tile { memcpy } } }
+            // → TILE_B contiguous writes per x, total TILE_B * batchSize writes
+            // fit in ~L1 per tile. Reads from `a` are strided within the tile
+            // but prefetcher-friendly (sequential across b).
+            constexpr uint64_t TILE_B = 64;
+#pragma omp parallel for schedule(static)
+            for (uint64_t b_block = 0; b_block < nBatches; b_block += TILE_B)
             {
-                //case: any phase and not inverse
+                uint64_t b_end = b_block + TILE_B < nBatches ? b_block + TILE_B : nBatches;
                 for (uint64_t x = 0; x < batchSize; x++)
                 {
-                    uint64_t offset_a2 = (x * nBatches + b) * strideA2 + offsetA2;
-                    uint64_t offset_a = (b * batchSize + x) * strideA + offsetA;
-                    std::memcpy(&a2[offset_a2], &a[offset_a], ncols * sizeof(Goldilocks::Element));
+                    for (uint64_t b = b_block; b < b_end; b++)
+                    {
+                        uint64_t offset_a2 = (x * nBatches + b) * strideA2 + offsetA2;
+                        uint64_t offset_a = (b * batchSize + x) * strideA + offsetA;
+                        std::memcpy(&a2[offset_a2], &a[offset_a], ncols * sizeof(Goldilocks::Element));
+                    }
                 }
             }
-            else
+        }
+        else
+        {
+            // Last-phase scale (extend or INTT): already uses the fused
+            // ntt_neon_scale path. Keep the per-b structure since the
+            // scale already amortises the per-row cost.
+#pragma omp parallel for schedule(static, chunk1)
+            for (uint64_t b = 0; b < nBatches; b++)
             {
                 if (extend)
                 {
-                    //case: last phase and extend
                     for (uint64_t x = 0; x < batchSize; x++)
                     {
                         uint64_t dsty = intt_idx((x * nBatches + b), nrows);
                         uint64_t offset_a2 = dsty * strideA2 + offsetA2;
                         uint64_t offset_a = (b * batchSize + x) * strideA + offsetA;
+#if PIL2_HAS_NEON
+                        ntt_neon_scale(a2, offset_a2, a, offset_a, r_[dsty], ncols);
+#else
                         for (uint64_t k = 0; k < ncols; k++)
                         {
                             Goldilocks::mul(a2[offset_a2 + k], a[offset_a + k], r_[dsty]);
                         }
+#endif
                     }
                 }
-                else 
+                else
                 {
-                    //case: last phase and inverse
                     assert(inverse);
                     for (uint64_t x = 0; x < batchSize; x++)
                     {
                         uint64_t dsty = intt_idx((x * nBatches + b), nrows);
                         uint64_t offset_a2 = dsty * strideA2 + offsetA2;
                         uint64_t offset_a = (b * batchSize + x) * strideA + offsetA;
+#if PIL2_HAS_NEON
+                        ntt_neon_scale(a2, offset_a2, a, offset_a, powTwoInv[domainPow], ncols);
+#else
                         for (uint64_t k = 0; k < ncols; k++)
                         {
                             Goldilocks::mul(a2[offset_a2 + k], a[offset_a + k], powTwoInv[domainPow]);
                         }
+#endif
                     }
                 }
             }
@@ -372,7 +427,28 @@ void NTT_Goldilocks::LDE(Goldilocks::Element *output, Goldilocks::Element *input
         return;
     }
 
-    NTT_Goldilocks ntt_extension(N_Extended, nThreads, N_Extended / N);
+    // Cache the extension NTT across LDE calls. STARK proving calls LDE
+    // multiple times per proof (one per stage's extendAndMerkelize) with
+    // the same (N_Extended, factor) shape, and each construction repeats
+    // an O(N_Extended) root-of-unity precompute + allocates
+    // roots[N_Extended] + powTwoInv[log2(N_Extended)+1]. Reusing skips
+    // both. Function-static so the class layout stays unchanged.
+    //
+    // Thread-safety: LDE is called from single-threaded prover top level
+    // (not from inside OpenMP regions). A shared static cache is safe
+    // here; the NTT object it references is used read-only during the
+    // NTT() call below (OMP-internal parallelism over its read-only
+    // roots/powTwoInv tables).
+    static std::unique_ptr<NTT_Goldilocks> ntt_ext_cache;
+    static uint64_t                        ntt_ext_cache_N      = 0;
+    static int                             ntt_ext_cache_factor = 0;
+    int factor = static_cast<int>(N_Extended / N);
+    if (!ntt_ext_cache || ntt_ext_cache_N != N_Extended || ntt_ext_cache_factor != factor) {
+        ntt_ext_cache.reset(new NTT_Goldilocks(N_Extended, nThreads, factor));
+        ntt_ext_cache_N      = N_Extended;
+        ntt_ext_cache_factor = factor;
+    }
+    NTT_Goldilocks& ntt_extension = *ntt_ext_cache;
 
     Goldilocks::Element *tmp = NULL;
     if (buffer == NULL)

@@ -319,7 +319,15 @@ public:
 
     static void batchInverse(Element *res, const Element *src, uint64_t size)
     {
-        Element* tmp = new Element[size];
+        // Thread-local scratch — same pattern as Goldilocks::batchInverse.
+        // `Element` here is `Goldilocks::Element[3]` (array), so we hold it
+        // as an aligned struct wrapper to keep vector<> well-defined.
+        struct CubicScratch { Goldilocks::Element e[3]; };
+        thread_local std::vector<CubicScratch> tmp_buf;
+        if (tmp_buf.size() < size) {
+            tmp_buf.resize(size);
+        }
+        Element* tmp = reinterpret_cast<Element*>(tmp_buf.data());
         copy(tmp[0], src[0]);
 
         for (uint64_t i = 1; i < size; i++)
@@ -337,8 +345,6 @@ public:
             copy(z, z2);
         }
         copy(res[0], z);
-
-        delete[] tmp;
     }
 
     // ======== OPERATIONS ========

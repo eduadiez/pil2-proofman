@@ -2,6 +2,115 @@
 #include "expressions_pack.hpp"
 #include "hints.hpp"
 
+// ----------------------------------------------------------------------------
+// Parallel prefix scan helper.
+//
+// `accHintField` / `accMulHintFields` both do `vals[i] = vals[i] OP vals[i-1]`
+// over N = 1<<nBits rows serially. That's a serial dependency chain that
+// leaves 9+ P-cores idle. Both `+` and `*` are associative, so classic
+// three-phase parallel prefix applies:
+//   1. Each thread does an in-place inclusive scan of its block.
+//   2. Scan block totals serially (P is small, ~10 on M4 Pro).
+//   3. Each thread (except block 0) combines its block's exclusive prefix
+//      into every element of its block.
+//
+// Works for base-field (stride=1) and cubic (stride=3). Small-N fallback
+// to serial keeps correctness on tiny domains without OMP overhead.
+// ----------------------------------------------------------------------------
+namespace {
+
+static inline void prefix_op_apply(Goldilocks::Element* dst,
+                                   const Goldilocks::Element* a,
+                                   const Goldilocks::Element* b,
+                                   uint64_t stride, bool is_add) {
+    if (stride == 1) {
+        if (is_add) Goldilocks::add(*dst, *a, *b);
+        else        Goldilocks::mul(*dst, *a, *b);
+    } else {
+        auto& d  = *reinterpret_cast<Goldilocks3::Element*>(dst);
+        auto& aa = *reinterpret_cast<const Goldilocks3::Element*>(a);
+        auto& bb = *reinterpret_cast<const Goldilocks3::Element*>(b);
+        if (is_add) Goldilocks3::add(d, aa, bb);
+        else        Goldilocks3::mul(d, aa, bb);
+    }
+}
+
+static inline void prefix_op_identity(Goldilocks::Element* dst,
+                                      uint64_t stride, bool is_add) {
+    if (stride == 1) {
+        dst[0] = is_add ? Goldilocks::zero() : Goldilocks::one();
+    } else {
+        auto& d = *reinterpret_cast<Goldilocks3::Element*>(dst);
+        if (is_add) Goldilocks3::zero(d);
+        else        Goldilocks3::one(d);
+    }
+}
+
+static void prefix_scan_inplace(Goldilocks::Element* vals,
+                                uint64_t N, uint64_t stride, bool is_add) {
+    if (N <= 1) return;
+
+    // Serial fallback for tiny N where OMP overhead dominates.
+    // Empirically on fibonacci-square e2e, N=2^16 (=65536) per call loses
+    // ~1ms to OMP dispatch vs ~0.2ms saved by parallelism — net regression.
+    // Threshold of 2^18 keeps parallel path on for circuits with ≥256K rows
+    // (the regime where the 5-20% Codex estimate actually materialises).
+    constexpr uint64_t kMinParallelN = 1u << 18;
+    int P = omp_get_max_threads();
+    if (N < kMinParallelN || P <= 1) {
+        for (uint64_t i = 1; i < N; ++i) {
+            prefix_op_apply(&vals[i*stride], &vals[i*stride],
+                            &vals[(i-1)*stride], stride, is_add);
+        }
+        return;
+    }
+
+    if ((uint64_t)P > N) P = (int)N;
+    uint64_t chunk = (N + P - 1) / P;
+
+    // Phase 1: per-thread local inclusive scan.
+    std::vector<Goldilocks::Element> block_last((size_t)P * stride);
+  #pragma omp parallel for num_threads(P) schedule(static, 1)
+    for (int t = 0; t < P; ++t) {
+        uint64_t s = (uint64_t)t * chunk;
+        uint64_t e = std::min(s + chunk, N);
+        if (s >= e) continue;
+        for (uint64_t i = s + 1; i < e; ++i) {
+            prefix_op_apply(&vals[i*stride], &vals[i*stride],
+                            &vals[(i-1)*stride], stride, is_add);
+        }
+        for (uint64_t d = 0; d < stride; ++d) {
+            block_last[(size_t)t*stride + d] = vals[(e-1)*stride + d];
+        }
+    }
+
+    // Phase 2: serial scan of block totals into exclusive prefixes.
+    std::vector<Goldilocks::Element> block_prefix((size_t)P * stride);
+    prefix_op_identity(&block_prefix[0], stride, is_add);
+    for (int t = 1; t < P; ++t) {
+        prefix_op_apply(&block_prefix[(size_t)t*stride],
+                        &block_prefix[(size_t)(t-1)*stride],
+                        &block_last[(size_t)(t-1)*stride],
+                        stride, is_add);
+    }
+
+    // Phase 3: combine block's exclusive prefix into each of its elements.
+    // Block 0's prefix is identity, so skip it.
+  #pragma omp parallel for num_threads(P) schedule(static, 1)
+    for (int t = 1; t < P; ++t) {
+        uint64_t s = (uint64_t)t * chunk;
+        uint64_t e = std::min(s + chunk, N);
+        if (s >= e) continue;
+        for (uint64_t i = s; i < e; ++i) {
+            prefix_op_apply(&vals[i*stride], &vals[i*stride],
+                            &block_prefix[(size_t)t*stride],
+                            stride, is_add);
+        }
+    }
+}
+
+}  // anonymous namespace
+
 
 void getPolynomial(SetupCtx& setupCtx, Goldilocks::Element *buffer, Goldilocks::Element *dest, PolMap& polInfo, uint64_t rowOffsetIndex, string type) {
     std::string stage = type == "cm" ? "cm" + to_string(polInfo.stage) : type == "custom" ? setupCtx.starkInfo.customCommits[polInfo.commitId].name + "0" : "const";
@@ -589,21 +698,8 @@ void accHintField(SetupCtx& setupCtx, StepsParams &params, ExpressionsCtx &expre
 
     expressionsCtx.calculateExpressions(params, destStruct, N, false, false);
 
-    for(uint64_t i = 1; i < N; ++i) {
-        if(add) {
-            if(dim == 1) {
-                Goldilocks::add(vals[i], vals[i], vals[(i - 1)]);
-            } else {
-                Goldilocks3::add((Goldilocks3::Element &)vals[i * FIELD_EXTENSION], (Goldilocks3::Element &)vals[i * FIELD_EXTENSION], (Goldilocks3::Element &)vals[(i - 1) * FIELD_EXTENSION]);
-            }
-        } else {
-            if(dim == 1) {
-                Goldilocks::mul(vals[i], vals[i], vals[(i - 1)]);
-            } else {
-                Goldilocks3::mul((Goldilocks3::Element &)vals[i * FIELD_EXTENSION], (Goldilocks3::Element &)vals[i * FIELD_EXTENSION], (Goldilocks3::Element &)vals[(i - 1) * FIELD_EXTENSION]);
-            }
-        }
-    }
+    // Parallel prefix scan replaces the serial `vals[i] OP= vals[i-1]` chain.
+    prefix_scan_inplace(vals, N, /*stride=*/(uint64_t)dim, /*is_add=*/add);
 
     setHintField(setupCtx, params, vals, hintId, hintFieldNameDest);
     setHintField(setupCtx, params, &vals[(N - 1)*FIELD_EXTENSION], hintId, hintFieldNameAirgroupVal);
@@ -643,21 +739,9 @@ void accMulHintFields(SetupCtx& setupCtx, StepsParams &params, ExpressionsCtx &e
     addHintField(setupCtx, params, hintId, destStruct, hintFieldName1, hintOptions1);
     addHintField(setupCtx, params, hintId, destStruct, hintFieldName2, hintOptions2);
     expressionsCtx.calculateExpressions(params, destStruct, N, false, false);
-    for(uint64_t i = 1; i < N; ++i) {
-        if(add) {
-            if(dim == 1) {
-                Goldilocks::add(vals[i], vals[i], vals[(i - 1)]);
-            } else {
-                Goldilocks3::add((Goldilocks3::Element &)vals[i * FIELD_EXTENSION], (Goldilocks3::Element &)vals[i * FIELD_EXTENSION], (Goldilocks3::Element &)vals[(i - 1) * FIELD_EXTENSION]);
-            }
-        } else {
-            if(dim == 1) {
-                Goldilocks::mul(vals[i], vals[i], vals[(i - 1)]);
-            } else {
-                Goldilocks3::mul((Goldilocks3::Element &)vals[i * FIELD_EXTENSION], (Goldilocks3::Element &)vals[i * FIELD_EXTENSION], (Goldilocks3::Element &)vals[(i - 1) * FIELD_EXTENSION]);
-            }
-        }
-    }
+    // Parallel prefix scan replaces the serial `vals[i] OP= vals[i-1]` chain.
+    prefix_scan_inplace(vals, N, /*stride=*/(uint64_t)dim, /*is_add=*/add);
+
     setHintField(setupCtx, params, vals, hintId, hintFieldNameDest);
     if (hintFieldNameAirgroupVal != "") {
         setHintField(setupCtx, params, &vals[(N - 1)*FIELD_EXTENSION], hintId, hintFieldNameAirgroupVal);

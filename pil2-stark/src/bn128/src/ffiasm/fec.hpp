@@ -6,6 +6,7 @@
 #include <gmp.h>
 #include <iostream>
 #include <cassert>
+#include <cstdlib>
 
 #define Fec_N64 4
 #define Fec_SHORT 0x00000000
@@ -76,171 +77,58 @@ extern FecElement Fec_R3;
 extern FecRawElement Fec_rawq;
 extern FecRawElement Fec_rawR3;
 
-inline void Fec_copy(PFecElement r, PFecElement a){
-    std::cerr << "Fec_copy() not implemented in C++ code." << std::endl;
-   assert(false);
-}
-inline void Fec_copyn(PFecElement r, PFecElement a, int n){
-    std::cerr << "Fec_copyn() not implemented in C++ code." << std::endl;
-   assert(false);
-}
-inline void Fec_add(PFecElement r, PFecElement a, PFecElement b) {
-    std::cerr << "Fec_add() not implemented in C++ code." << std::endl;
-   assert(false);
-}
-inline void Fec_sub(PFecElement r, PFecElement a, PFecElement b) {
-    std::cerr << "Fec_sub() not implemented in C++ code." << std::endl;
-   assert(false);
-}
-inline void Fec_neg(PFecElement r, PFecElement a) {
-    std::cerr << "Fec_neg() not implemented in C++ code." << std::endl;
-   assert(false);
-}
-inline void Fec_mul(PFecElement r, PFecElement a, PFecElement b) {
-    std::cerr << "Fec_mul() not implemented in C++ code." << std::endl;
-   assert(false);
-}
-inline void Fec_square(PFecElement r, PFecElement a) {
-    std::cerr << "Fec_square() not implemented in C++ code." << std::endl;
-   assert(false);
-}
-inline void Fec_band(PFecElement r, PFecElement a, PFecElement b) {
-    std::cerr << "Fec_band() not implemented in C++ code." << std::endl;
-   assert(false);
-}
-inline void Fec_bor(PFecElement r, PFecElement a, PFecElement b) {
-    std::cerr << "Fec_bor() not implemented in C++ code." << std::endl;
-   assert(false);
-}
-inline void Fec_bxor(PFecElement r, PFecElement a, PFecElement b) {
-    std::cerr << "Fec_bxor() not implemented in C++ code." << std::endl;
-   assert(false);
-}
-inline void Fec_bnot(PFecElement r, PFecElement a) {
-    std::cerr << "Fec_bnot() not implemented in C++ code." << std::endl;
-   assert(false);
-}
-inline void Fec_shl(PFecElement r, PFecElement a, PFecElement b) {
-    std::cerr << "Fec_shl() not implemented in C++ code." << std::endl;
-   assert(false);
-}
-inline void Fec_shr(PFecElement r, PFecElement a, PFecElement b) {
-    std::cerr << "Fec_shr() not implemented in C++ code." << std::endl;
-   assert(false);
-}
-inline void Fec_eq(PFecElement r, PFecElement a, PFecElement b) {
-    std::cerr << "Fec_eq() not implemented in C++ code." << std::endl;
-   assert(false);
-}
-inline void Fec_neq(PFecElement r, PFecElement a, PFecElement b) {
-    std::cerr << "Fec_neq() not implemented in C++ code." << std::endl;
-   assert(false);
-}
-inline void Fec_lt(PFecElement r, PFecElement a, PFecElement b) {
-    std::cerr << "Fec_lt() not implemented in C++ code." << std::endl;
-   assert(false);
-}
-inline void Fec_gt(PFecElement r, PFecElement a, PFecElement b) {
-    std::cerr << "Fec_gt() not implemented in C++ code." << std::endl;
-   assert(false);
-}
-inline void Fec_leq(PFecElement r, PFecElement a, PFecElement b) {
-    std::cerr << "Fec_leq() not implemented in C++ code." << std::endl;
-   assert(false);
-}
-inline void Fec_geq(PFecElement r, PFecElement a, PFecElement b) {
-    std::cerr << "Fec_geq() not implemented in C++ code." << std::endl;
-   assert(false);
-}
-inline void Fec_land(PFecElement r, PFecElement a, PFecElement b) {
-    std::cerr << "Fec_land() not implemented in C++ code." << std::endl;
-   assert(false);
-}
-inline void Fec_lor(PFecElement r, PFecElement a, PFecElement b) {
-    std::cerr << "Fec_lor() not implemented in C++ code." << std::endl;
-   assert(false);
-}
-inline void Fec_lnot(PFecElement r, PFecElement a) {
-    std::cerr << "Fec_lnot() not implemented in C++ code." << std::endl;
-   assert(false);
-}
-inline void Fec_toNormal(PFecElement r, PFecElement a) {
-    std::cerr << "Fec_toNormal() not implemented in C++ code." << std::endl;
-   assert(false);
-}
-inline void Fec_toLongNormal(PFecElement r, PFecElement a) {
-    std::cerr << "Fec_toLongNormal() not implemented in C++ code." << std::endl;
-   assert(false);
-}
-inline void Fec_toMontgomery(PFecElement r, PFecElement a) {
-    std::cerr << "Fec_toMontgomery() not implemented in C++ code." << std::endl;
-   assert(false);
+// Stubs for builds without __USE_ASSEMBLY__ (e.g. Darwin/arm64 today).
+// Calling any of these is a programmer error: the bn128 path is not
+// wired on this platform yet. Abort unconditionally so that misroutes
+// surface immediately instead of silently corrupting the proof.
+[[noreturn]] inline void Fec_unimplemented(const char* fn) {
+    std::cerr << fn << " not implemented in C++ code "
+                 "(build without __USE_ASSEMBLY__)." << std::endl;
+    std::abort();
 }
 
-inline int Fec_isTrue(PFecElement pE) {
-   std::cerr << "Fec_isTrue() not implemented in C++ code." << std::endl;
-  assert(false);
-   return 0; // Placeholder return value
-}
-inline int Fec_toInt(PFecElement pE) {
-    std::cerr << "Fec_toInt() not implemented in C++ code." << std::endl;
-   assert(false);
-    return 0; // Placeholder return value
-}
+inline void Fec_copy(PFecElement r, PFecElement a)                                                       { Fec_unimplemented("Fec_copy"); }
+inline void Fec_copyn(PFecElement r, PFecElement a, int n)                                               { Fec_unimplemented("Fec_copyn"); }
+inline void Fec_add(PFecElement r, PFecElement a, PFecElement b)                                         { Fec_unimplemented("Fec_add"); }
+inline void Fec_sub(PFecElement r, PFecElement a, PFecElement b)                                         { Fec_unimplemented("Fec_sub"); }
+inline void Fec_neg(PFecElement r, PFecElement a)                                                        { Fec_unimplemented("Fec_neg"); }
+inline void Fec_mul(PFecElement r, PFecElement a, PFecElement b)                                         { Fec_unimplemented("Fec_mul"); }
+inline void Fec_square(PFecElement r, PFecElement a)                                                     { Fec_unimplemented("Fec_square"); }
+inline void Fec_band(PFecElement r, PFecElement a, PFecElement b)                                        { Fec_unimplemented("Fec_band"); }
+inline void Fec_bor(PFecElement r, PFecElement a, PFecElement b)                                         { Fec_unimplemented("Fec_bor"); }
+inline void Fec_bxor(PFecElement r, PFecElement a, PFecElement b)                                        { Fec_unimplemented("Fec_bxor"); }
+inline void Fec_bnot(PFecElement r, PFecElement a)                                                       { Fec_unimplemented("Fec_bnot"); }
+inline void Fec_shl(PFecElement r, PFecElement a, PFecElement b)                                         { Fec_unimplemented("Fec_shl"); }
+inline void Fec_shr(PFecElement r, PFecElement a, PFecElement b)                                         { Fec_unimplemented("Fec_shr"); }
+inline void Fec_eq(PFecElement r, PFecElement a, PFecElement b)                                          { Fec_unimplemented("Fec_eq"); }
+inline void Fec_neq(PFecElement r, PFecElement a, PFecElement b)                                         { Fec_unimplemented("Fec_neq"); }
+inline void Fec_lt(PFecElement r, PFecElement a, PFecElement b)                                          { Fec_unimplemented("Fec_lt"); }
+inline void Fec_gt(PFecElement r, PFecElement a, PFecElement b)                                          { Fec_unimplemented("Fec_gt"); }
+inline void Fec_leq(PFecElement r, PFecElement a, PFecElement b)                                         { Fec_unimplemented("Fec_leq"); }
+inline void Fec_geq(PFecElement r, PFecElement a, PFecElement b)                                         { Fec_unimplemented("Fec_geq"); }
+inline void Fec_land(PFecElement r, PFecElement a, PFecElement b)                                        { Fec_unimplemented("Fec_land"); }
+inline void Fec_lor(PFecElement r, PFecElement a, PFecElement b)                                         { Fec_unimplemented("Fec_lor"); }
+inline void Fec_lnot(PFecElement r, PFecElement a)                                                       { Fec_unimplemented("Fec_lnot"); }
+inline void Fec_toNormal(PFecElement r, PFecElement a)                                                   { Fec_unimplemented("Fec_toNormal"); }
+inline void Fec_toLongNormal(PFecElement r, PFecElement a)                                               { Fec_unimplemented("Fec_toLongNormal"); }
+inline void Fec_toMontgomery(PFecElement r, PFecElement a)                                               { Fec_unimplemented("Fec_toMontgomery"); }
 
-inline void Fec_rawCopy(FecRawElement pRawResult, const FecRawElement pRawA) {
-    std::cerr << "Fec_rawCopy() not implemented in C++ code." << std::endl;
-   assert(false);
-}
-inline void Fec_rawSwap(FecRawElement pRawResult, FecRawElement pRawA) {
-    std::cerr << "Fec_rawSwap() not implemented in C++ code." << std::endl;
-   assert(false);
-}
-inline void Fec_rawAdd(FecRawElement pRawResult, const FecRawElement pRawA, const FecRawElement pRawB) {
-    std::cerr << "Fec_rawAdd() not implemented in C++ code." << std::endl;
-   assert(false);
-}
-inline void Fec_rawSub(FecRawElement pRawResult, const FecRawElement pRawA, const FecRawElement pRawB) {
-    std::cerr << "Fec_rawSub() not implemented in C++ code." << std::endl;
-   assert(false);
-}
-inline void Fec_rawNeg(FecRawElement pRawResult, const FecRawElement pRawA) {
-    std::cerr << "Fec_rawNeg() not implemented in C++ code." << std::endl;
-   assert(false);
-}
-inline void Fec_rawMMul(FecRawElement pRawResult, const FecRawElement pRawA, const FecRawElement pRawB) {
-    std::cerr << "Fec_rawMMul() not implemented in C++ code." << std::endl;
-   assert(false);
-}
-inline void Fec_rawMSquare(FecRawElement pRawResult, const FecRawElement pRawA) {
-    std::cerr << "Fec_rawMSquare() not implemented in C++ code." << std::endl;
-   assert(false);
-}
-inline void Fec_rawMMul1(FecRawElement pRawResult, const FecRawElement pRawA, uint64_t pRawB) {
-    std::cerr << "Fec_rawMMul1() not implemented in C++ code." << std::endl;
-   assert(false);
-}
-inline void Fec_rawToMontgomery(FecRawElement pRawResult, const FecRawElement &pRawA) {
-    std::cerr << "Fec_rawToMontgomery() not implemented in C++ code." << std::endl;
-    assert(false);
-}
-inline void Fec_rawFromMontgomery(FecRawElement pRawResult, const FecRawElement &pRawA) {
-    std::cerr << "Fec_rawFromMontgomery() not implemented in C++ code." << std::endl;
-   assert(false);
-}
-inline int Fec_rawIsEq(const FecRawElement pRawA, const FecRawElement pRawB) {
-    std::cerr << "Fec_rawIsEq() not implemented in C++ code." << std::endl;
-   assert(false);
-    return 0; // Placeholder return value
-}
-inline int Fec_rawIsZero(const FecRawElement pRawB) {
-    std::cerr << "Fec_rawIsZero() not implemented in C++ code." << std::endl;
-   assert(false);
-    return 0; // Placeholder return value
-}
-inline void FecP_fail() {
-   assert(false);
-}
+inline int Fec_isTrue(PFecElement pE)                                                                    { Fec_unimplemented("Fec_isTrue"); }
+inline int Fec_toInt(PFecElement pE)                                                                     { Fec_unimplemented("Fec_toInt"); }
+
+inline void Fec_rawCopy(FecRawElement pRawResult, const FecRawElement pRawA)                             { Fec_unimplemented("Fec_rawCopy"); }
+inline void Fec_rawSwap(FecRawElement pRawResult, FecRawElement pRawA)                                   { Fec_unimplemented("Fec_rawSwap"); }
+inline void Fec_rawAdd(FecRawElement pRawResult, const FecRawElement pRawA, const FecRawElement pRawB)   { Fec_unimplemented("Fec_rawAdd"); }
+inline void Fec_rawSub(FecRawElement pRawResult, const FecRawElement pRawA, const FecRawElement pRawB)   { Fec_unimplemented("Fec_rawSub"); }
+inline void Fec_rawNeg(FecRawElement pRawResult, const FecRawElement pRawA)                              { Fec_unimplemented("Fec_rawNeg"); }
+inline void Fec_rawMMul(FecRawElement pRawResult, const FecRawElement pRawA, const FecRawElement pRawB)  { Fec_unimplemented("Fec_rawMMul"); }
+inline void Fec_rawMSquare(FecRawElement pRawResult, const FecRawElement pRawA)                          { Fec_unimplemented("Fec_rawMSquare"); }
+inline void Fec_rawMMul1(FecRawElement pRawResult, const FecRawElement pRawA, uint64_t pRawB)            { Fec_unimplemented("Fec_rawMMul1"); }
+inline void Fec_rawToMontgomery(FecRawElement pRawResult, const FecRawElement &pRawA)                    { Fec_unimplemented("Fec_rawToMontgomery"); }
+inline void Fec_rawFromMontgomery(FecRawElement pRawResult, const FecRawElement &pRawA)                  { Fec_unimplemented("Fec_rawFromMontgomery"); }
+inline int Fec_rawIsEq(const FecRawElement pRawA, const FecRawElement pRawB)                             { Fec_unimplemented("Fec_rawIsEq"); }
+inline int Fec_rawIsZero(const FecRawElement pRawB)                                                      { Fec_unimplemented("Fec_rawIsZero"); }
+inline void FecP_fail()                                                                                  { Fec_unimplemented("FecP_fail"); }
 #endif
 
 
