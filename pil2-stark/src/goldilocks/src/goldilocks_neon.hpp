@@ -158,8 +158,11 @@ inline uint64x2_t gl_mul(uint64x2_t a, uint64x2_t b) {
           [eps]"r"(EPS)
         : "cc"
     );
-    uint64_t tmp[2] = {r0, r1};
-    return vld1q_u64(tmp);
+    // Construct the result NEON reg via direct GP->NEON lane moves
+    // (compiles to two fmov instructions on aarch64) instead of a
+    // stack write + vld1q_u64 round-trip.
+    uint64x2_t out = vsetq_lane_u64(r0, vdupq_n_u64(0), 0);
+    return vsetq_lane_u64(r1, out, 1);
 #else
     uint64_t r0 = gl_mul_scalar(vgetq_lane_u64(a, 0), vgetq_lane_u64(b, 0));
     uint64_t r1 = gl_mul_scalar(vgetq_lane_u64(a, 1), vgetq_lane_u64(b, 1));
