@@ -7,6 +7,7 @@ Two reference files in this directory:
 | `zisk1.txt` | Linux x86_64, 32-core 5.7GHz | Before PR #465's bench reorg | Scalar + AVX + AVX-512 (multi-variant) |
 | `apple-silicon-m4pro-scalar.txt` | macOS arm64, M4 Pro 14-core | After PR #465 bench reorg, before any NEON code lands | Scalar only (no AVX on Darwin, NEON not yet wired) |
 | `apple-silicon-m4pro-neon-w8.txt` | macOS arm64, M4 Pro 14-core | Part 5 Task 35 — NEON W=8 wired (naive per-lane gl_mul) | Scalar + NEON W=8 |
+| `apple-silicon-m4pro-neon-w8-paired.txt` | macOS arm64, M4 Pro 14-core | Part 5 Task 35.5 — paired-asm gl_mul | Scalar + NEON W=8 (paired) |
 
 The two files **cannot be row-compared by name** because PR #465 (`refactor:
 reorganize tests/benchmarks into per-area files`) renamed every benchmark
@@ -101,24 +102,41 @@ favor x86's deeper pipelines and x86 build's `__USE_ASSEMBLY__` codepath
 
 ---
 
-## 3.5. W=8 NEON vs scalar (first-pass impl)
+## 3.5. W=8 NEON vs scalar — evolution across implementations
 
-| Bench | Scalar | NEON (Task 35) | Δ |
+| Bench | Scalar | NEON Task 35 (per-lane scalar) | NEON Task 35.5 (paired asm) |
 |---|---|---|---|
-| `PERMUTE_W8`  | 173 ms | 170 ms | −1.7% (parity) |
-| `COMPRESS_W8` | 175 ms | 175 ms |  0%   (parity) |
+| `PERMUTE_W8`  | 173-186 ms | 170 ms (parity) | 169-174 ms (~5% faster) |
+| `COMPRESS_W8` | 173-177 ms | 175 ms (parity) | 164-169 ms (~5% faster) |
 
-**Honest read:** the first-pass NEON port is at parity with scalar, not faster.
-The reason: `Goldilocks_neon::gl_mul` does per-lane scalar `__uint128_t`
-inside a NEON wrapper — the wrap/unwrap overhead exactly cancels the
-saved instruction on add. NEON only beats scalar when the inner mul is
-ALSO vectorised (e.g. via `vmull_u32` for the 32×32→64 pieces of the
-Goldilocks reduction). That optimisation is queued as Task 35.5; for now
-the bit-exactness gate is what matters and parity is acceptable.
+**Honest read:** Task 35.5's paired-asm `gl_mul` (manually interleaving
+the two lanes' `mul`+`umulh` to keep both Apple Silicon integer-mul pipes
+busy each cycle) gives a real but modest ~5% win, not the 1.5× the per-
+primitive theoretical maximum suggests. Reasons the win is small:
 
-A 19% regression seen in an early short-iteration capture turned out to
-be measurement noise — running with `--benchmark_min_time=1.0s` and
-8+ iterations stabilises at parity.
+1. The 22 partial rounds still extract NEON state to scalars, do the sum
+   + state[0] arithmetic in scalar code, then reload — 22/(8+22) ≈ 73%
+   of total rounds bypass NEON entirely.
+2. `matmul_external_neon` punts to the existing scalar matmul via
+   NEON-store / scalar-call / NEON-load (cheap operations dominated by
+   pow7's mul cost, but still measurable).
+3. `gl_add` and `gl_sub` are per-lane scalar with NEON wrappers — same
+   wrap/unwrap overhead pattern.
+
+The benchmark measurement noise floor on this M4 Pro under typical load
+is ~5%, so reporting 1s and 2s `--benchmark_min_time` numbers as a range
+is the honest way to do it.
+
+The path to a bigger win:
+- Vectorise the partial-round arithmetic (NEON sum-across-lanes via
+  `vaddvq_u64` + canonical reduction) — 73% of remaining round work
+- Vectorise `matmul_external` directly in NEON (16 adds + 8 cross-chunk
+  adds, all of which fit cleanly in NEON)
+- Possibly fuse gl_add/gl_mul with their use sites to eliminate the
+  per-call wrap/unwrap.
+
+These are queued as Phase B follow-ups, not blockers for the bit-exact
+gate.
 
 ---
 

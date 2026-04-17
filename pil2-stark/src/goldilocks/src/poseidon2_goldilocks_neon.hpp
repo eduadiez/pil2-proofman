@@ -93,13 +93,80 @@ static inline uint64_t gl_sub_scalar(uint64_t a, uint64_t b) {
 
 // ---- Vectorised wrappers --------------------------------------------------
 
+// Paired Goldilocks mul on aarch64. Apple Silicon has two integer-mul
+// pipes (each can issue mul+umulh per cycle). The naive per-lane scalar
+// path uses only one pipe at a time, giving NO real speedup over scalar.
+// Manually interleaving the two lanes' mul/umulh and reduction steps
+// lets clang feed both pipes — the actual win.
+//
+// Reduction (matches goldilocks_base_field_scalar.hpp::Goldilocks::mul
+// bit-for-bit, returning a value in [0, 2^64) which may be in [p, 2p)):
+//   prod = a * b              (128 bits via mul + umulh)
+//   hh   = prod[127:96]
+//   hl   = prod[95:64]
+//   t    = prod[63:0] - hh    (subtract hh from lo, +EPSILON on borrow)
+//   he   = (hl << 32) - hl    = hl * (2^32 - 1) = hl * EPSILON
+//   r    = t + he             (mod 2^64; +EPSILON on overflow)
+// where EPSILON = 2^32 - 1 = -p mod 2^64.
 inline uint64x2_t gl_mul(uint64x2_t a, uint64x2_t b) {
+#if defined(__aarch64__)
+    uint64_t a0 = vgetq_lane_u64(a, 0);
+    uint64_t a1 = vgetq_lane_u64(a, 1);
+    uint64_t b0 = vgetq_lane_u64(b, 0);
+    uint64_t b1 = vgetq_lane_u64(b, 1);
+    constexpr uint64_t EPS = 0xFFFFFFFFULL;  // -p mod 2^64
+    uint64_t r0, r1;
+    uint64_t lo0, lo1, hi0, hi1, hh0, hh1, hl0, hl1, s0, s1, he0, he1;
+    uint64_t adj0, adj1, t0, t1;
+    asm(
+        "mul   %[lo0], %[a0], %[b0]\n\t"
+        "mul   %[lo1], %[a1], %[b1]\n\t"
+        "umulh %[hi0], %[a0], %[b0]\n\t"
+        "umulh %[hi1], %[a1], %[b1]\n\t"
+        "lsr   %[hh0], %[hi0], #32\n\t"
+        "lsr   %[hh1], %[hi1], #32\n\t"
+        "subs  %[t0],  %[lo0], %[hh0]\n\t"
+        "csetm %w[adj0], cc\n\t"
+        "subs  %[t1],  %[lo1], %[hh1]\n\t"
+        "csetm %w[adj1], cc\n\t"
+        "sub   %[t0],  %[t0], %[adj0]\n\t"
+        "sub   %[t1],  %[t1], %[adj1]\n\t"
+        "and   %[hl0], %[hi0], %[eps]\n\t"
+        "and   %[hl1], %[hi1], %[eps]\n\t"
+        "lsl   %[s0],  %[hl0], #32\n\t"
+        "lsl   %[s1],  %[hl1], #32\n\t"
+        "sub   %[he0], %[s0], %[hl0]\n\t"
+        "sub   %[he1], %[s1], %[hl1]\n\t"
+        "adds  %[r0],  %[t0], %[he0]\n\t"
+        "csetm %w[adj0], cs\n\t"
+        "adds  %[r1],  %[t1], %[he1]\n\t"
+        "csetm %w[adj1], cs\n\t"
+        "add   %[r0],  %[r0], %[adj0]\n\t"
+        "add   %[r1],  %[r1], %[adj1]\n\t"
+        : [r0]"=&r"(r0),   [r1]"=&r"(r1),
+          [lo0]"=&r"(lo0), [lo1]"=&r"(lo1),
+          [hi0]"=&r"(hi0), [hi1]"=&r"(hi1),
+          [hh0]"=&r"(hh0), [hh1]"=&r"(hh1),
+          [hl0]"=&r"(hl0), [hl1]"=&r"(hl1),
+          [s0]"=&r"(s0),   [s1]"=&r"(s1),
+          [he0]"=&r"(he0), [he1]"=&r"(he1),
+          [adj0]"=&r"(adj0), [adj1]"=&r"(adj1),
+          [t0]"=&r"(t0),   [t1]"=&r"(t1)
+        : [a0]"r"(a0), [b0]"r"(b0),
+          [a1]"r"(a1), [b1]"r"(b1),
+          [eps]"r"(EPS)
+        : "cc"
+    );
+    uint64_t tmp[2] = {r0, r1};
+    return vld1q_u64(tmp);
+#else
     uint64_t r0 = gl_mul_scalar(vgetq_lane_u64(a, 0), vgetq_lane_u64(b, 0));
     uint64_t r1 = gl_mul_scalar(vgetq_lane_u64(a, 1), vgetq_lane_u64(b, 1));
     uint64x2_t out = vdupq_n_u64(0);
     out = vsetq_lane_u64(r0, out, 0);
     out = vsetq_lane_u64(r1, out, 1);
     return out;
+#endif
 }
 
 inline uint64x2_t gl_square(uint64x2_t a) {
