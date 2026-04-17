@@ -122,4 +122,49 @@ TEST(Fr_rawNeg, computes_p_minus_a_mod_p) {
     }
 }
 
+TEST(Fr_rawAdd, sample_pair_sweep_matches_gmp) {
+    const mpz_class p = fr_modulus();
+    for (int i = 0; i < N_SAMPLES; i++) {
+        for (int j = 0; j < N_SAMPLES; j++) {
+            FrRawElement a, b, r;
+            from_mpz(a, sample(i));
+            from_mpz(b, sample(j));
+            Fr_rawAdd(r, a, b);
+            const mpz_class expected = (sample(i) + sample(j)) % p;
+            EXPECT_EQ(to_mpz(r), expected)
+                << "sample (" << i << ", " << j << ")";
+        }
+    }
+}
+
+TEST(Fr_rawAdd, edge_cases_around_modulus) {
+    const mpz_class p = fr_modulus();
+    FrRawElement a, b, r;
+
+    // (p - 1) + 1 == 0 (wraparound at p)
+    from_mpz(a, p - 1);
+    from_mpz(b, mpz_class(1));
+    Fr_rawAdd(r, a, b);
+    EXPECT_EQ(to_mpz(r), mpz_class(0)) << "(p-1) + 1";
+
+    // (p - 1) + (p - 1) == p - 2 (sum exceeds p, single subtract reduces)
+    from_mpz(a, p - 1);
+    from_mpz(b, p - 1);
+    Fr_rawAdd(r, a, b);
+    EXPECT_EQ(to_mpz(r), p - 2) << "(p-1) + (p-1)";
+
+    // 0 + 0 == 0
+    from_mpz(a, mpz_class(0));
+    from_mpz(b, mpz_class(0));
+    Fr_rawAdd(r, a, b);
+    EXPECT_EQ(to_mpz(r), mpz_class(0)) << "0 + 0";
+
+    // (p/2) + (p/2) -- exercises the boundary near p
+    const mpz_class half = p / 2;
+    from_mpz(a, half);
+    from_mpz(b, half);
+    Fr_rawAdd(r, a, b);
+    EXPECT_EQ(to_mpz(r), (half + half) % p) << "(p/2) + (p/2)";
+}
+
 #endif  // __USE_ASSEMBLY__

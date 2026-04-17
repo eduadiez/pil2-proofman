@@ -98,9 +98,42 @@ extern "C" void Fr_rawNeg(FrRawElement r, const FrRawElement a) {
     }
 }
 
-// ---- Stubs still pending (Tasks 18-21) -----------------------------------
+// Modular addition. For canonical inputs a, b in [0, p) the 4-limb sum
+// fits in 255 bits (since p < 2^254), so the carry out is always 0. The
+// reduction is a single conditional subtract of p.
+//
+// Implementation strategy: compute the subtraction unconditionally and
+// pick which result to keep based on the borrow flag — branch-light, no
+// secret-dependent comparisons (constant-time is not a goal here, but
+// the pattern is clean).
+extern "C" void Fr_rawAdd(FrRawElement r, const FrRawElement a, const FrRawElement b) {
+    uint64_t sum[Fr_N64];
+    __uint128_t carry = 0;
+    for (int i = 0; i < Fr_N64; i++) {
+        __uint128_t s = (__uint128_t)a[i] + b[i] + carry;
+        sum[i] = (uint64_t)s;
+        carry = s >> 64;
+    }
+    (void)carry;  // 0 for canonical inputs
 
-extern "C" void Fr_rawAdd(FrRawElement, const FrRawElement, const FrRawElement)                       { Fr_cios_stub("Fr_rawAdd"); }
+    uint64_t diff[Fr_N64];
+    int64_t borrow = 0;
+    for (int i = 0; i < Fr_N64; i++) {
+        __int128 d = (__int128)sum[i] - Fr_rawq[i] - borrow;
+        if (d < 0) {
+            diff[i] = (uint64_t)(d + ((__int128)1 << 64));
+            borrow = 1;
+        } else {
+            diff[i] = (uint64_t)d;
+            borrow = 0;
+        }
+    }
+    // borrow == 0 means sum >= p, use the reduced diff. Otherwise sum < p.
+    Fr_rawCopy(r, borrow == 0 ? diff : sum);
+}
+
+// ---- Stubs still pending (Tasks 19-21) -----------------------------------
+
 extern "C" void Fr_rawSub(FrRawElement, const FrRawElement, const FrRawElement)                       { Fr_cios_stub("Fr_rawSub"); }
 extern "C" void Fr_rawMMul(FrRawElement, const FrRawElement, const FrRawElement)                      { Fr_cios_stub("Fr_rawMMul"); }
 extern "C" void Fr_rawMSquare(FrRawElement, const FrRawElement)                                       { Fr_cios_stub("Fr_rawMSquare"); }
