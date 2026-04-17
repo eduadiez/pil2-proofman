@@ -20,12 +20,40 @@ typedef struct __attribute__((__packed__)) {
 } FrElement;
 typedef FrElement *PFrElement;
 
-#ifdef __USE_ASSEMBLY__
+// ---------------------------------------------------------------------------
+// Constants and raw operations are provided unconditionally:
+//   - On Linux (__USE_ASSEMBLY__ defined) by fr.asm.
+//   - On Darwin / arm64 (no asm) by ffiasm_cios_montgomery.cpp (CIOS).
+// Both providers expose the exact same C ABI; only the implementation site
+// changes per platform.
+// ---------------------------------------------------------------------------
 
 extern FrElement Fr_q;
 extern FrElement Fr_R3;
 extern FrRawElement Fr_rawq;
 extern FrRawElement Fr_rawR3;
+
+extern "C" void Fr_rawCopy(FrRawElement pRawResult, const FrRawElement pRawA);
+extern "C" void Fr_rawSwap(FrRawElement pRawResult, FrRawElement pRawA);
+extern "C" void Fr_rawAdd(FrRawElement pRawResult, const FrRawElement pRawA, const FrRawElement pRawB);
+extern "C" void Fr_rawSub(FrRawElement pRawResult, const FrRawElement pRawA, const FrRawElement pRawB);
+extern "C" void Fr_rawNeg(FrRawElement pRawResult, const FrRawElement pRawA);
+extern "C" void Fr_rawMMul(FrRawElement pRawResult, const FrRawElement pRawA, const FrRawElement pRawB);
+extern "C" void Fr_rawMSquare(FrRawElement pRawResult, const FrRawElement pRawA);
+extern "C" void Fr_rawMMul1(FrRawElement pRawResult, const FrRawElement pRawA, uint64_t pRawB);
+extern "C" void Fr_rawToMontgomery(FrRawElement pRawResult, const FrRawElement &pRawA);
+extern "C" void Fr_rawFromMontgomery(FrRawElement pRawResult, const FrRawElement &pRawA);
+extern "C" int Fr_rawIsEq(const FrRawElement pRawA, const FrRawElement pRawB);
+extern "C" int Fr_rawIsZero(const FrRawElement pRawB);
+
+// ---------------------------------------------------------------------------
+// Non-raw FrElement-based operations remain platform-conditional. The asm
+// implements them on Linux; on Darwin they stay unimplemented and abort
+// loudly if reached (none of them lie on the aggregation/recursion path
+// today, per the Part 2 Task 7 trace).
+// ---------------------------------------------------------------------------
+
+#ifdef __USE_ASSEMBLY__
 
 extern "C" void Fr_copy(PFrElement r, PFrElement a);
 extern "C" void Fr_copyn(PFrElement r, PFrElement a, int n);
@@ -56,32 +84,10 @@ extern "C" void Fr_toMontgomery(PFrElement r, PFrElement a);
 extern "C" int Fr_isTrue(PFrElement pE);
 extern "C" int Fr_toInt(PFrElement pE);
 
-extern "C" void Fr_rawCopy(FrRawElement pRawResult, const FrRawElement pRawA);
-extern "C" void Fr_rawSwap(FrRawElement pRawResult, FrRawElement pRawA);
-extern "C" void Fr_rawAdd(FrRawElement pRawResult, const FrRawElement pRawA, const FrRawElement pRawB);
-extern "C" void Fr_rawSub(FrRawElement pRawResult, const FrRawElement pRawA, const FrRawElement pRawB);
-extern "C" void Fr_rawNeg(FrRawElement pRawResult, const FrRawElement pRawA);
-extern "C" void Fr_rawMMul(FrRawElement pRawResult, const FrRawElement pRawA, const FrRawElement pRawB);
-extern "C" void Fr_rawMSquare(FrRawElement pRawResult, const FrRawElement pRawA);
-extern "C" void Fr_rawMMul1(FrRawElement pRawResult, const FrRawElement pRawA, uint64_t pRawB);
-extern "C" void Fr_rawToMontgomery(FrRawElement pRawResult, const FrRawElement &pRawA);
-extern "C" void Fr_rawFromMontgomery(FrRawElement pRawResult, const FrRawElement &pRawA);
-extern "C" int Fr_rawIsEq(const FrRawElement pRawA, const FrRawElement pRawB);
-extern "C" int Fr_rawIsZero(const FrRawElement pRawB);
-
 extern "C" void Fr_fail();
 
 #else
 
-static FrElement Fr_q;
-static FrElement Fr_R3;
-static FrRawElement Fr_rawq;
-static FrRawElement Fr_rawR3;
-
-// Stubs for builds without __USE_ASSEMBLY__ (e.g. Darwin/arm64 today).
-// Calling any of these is a programmer error: the bn128 path is not
-// wired on this platform yet. Abort unconditionally so that misroutes
-// surface immediately instead of silently corrupting the proof.
 [[noreturn]] inline void Fr_unimplemented(const char* fn) {
     std::cerr << fn << " not implemented in C++ code "
                  "(build without __USE_ASSEMBLY__)." << std::endl;
@@ -117,18 +123,6 @@ inline void Fr_toMontgomery(PFrElement r, PFrElement a)                         
 inline int Fr_isTrue(PFrElement pE)                                                                  { Fr_unimplemented("Fr_isTrue"); }
 inline int Fr_toInt(PFrElement pE)                                                                   { Fr_unimplemented("Fr_toInt"); }
 
-inline void Fr_rawCopy(FrRawElement pRawResult, const FrRawElement pRawA)                            { Fr_unimplemented("Fr_rawCopy"); }
-inline void Fr_rawSwap(FrRawElement pRawResult, FrRawElement pRawA)                                  { Fr_unimplemented("Fr_rawSwap"); }
-inline void Fr_rawAdd(FrRawElement pRawResult, const FrRawElement pRawA, const FrRawElement pRawB)   { Fr_unimplemented("Fr_rawAdd"); }
-inline void Fr_rawSub(FrRawElement pRawResult, const FrRawElement pRawA, const FrRawElement pRawB)   { Fr_unimplemented("Fr_rawSub"); }
-inline void Fr_rawNeg(FrRawElement pRawResult, const FrRawElement pRawA)                             { Fr_unimplemented("Fr_rawNeg"); }
-inline void Fr_rawMMul(FrRawElement pRawResult, const FrRawElement pRawA, const FrRawElement pRawB)  { Fr_unimplemented("Fr_rawMMul"); }
-inline void Fr_rawMSquare(FrRawElement pRawResult, const FrRawElement pRawA)                         { Fr_unimplemented("Fr_rawMSquare"); }
-inline void Fr_rawMMul1(FrRawElement pRawResult, const FrRawElement pRawA, uint64_t pRawB)           { Fr_unimplemented("Fr_rawMMul1"); }
-inline void Fr_rawToMontgomery(FrRawElement pRawResult, const FrRawElement &pRawA)                   { Fr_unimplemented("Fr_rawToMontgomery"); }
-inline void Fr_rawFromMontgomery(FrRawElement pRawResult, const FrRawElement &pRawA)                 { Fr_unimplemented("Fr_rawFromMontgomery"); }
-inline int Fr_rawIsEq(const FrRawElement pRawA, const FrRawElement pRawB)                            { Fr_unimplemented("Fr_rawIsEq"); }
-inline int Fr_rawIsZero(const FrRawElement pRawB)                                                    { Fr_unimplemented("Fr_rawIsZero"); }
 inline void Fr_fail()                                                                                { Fr_unimplemented("Fr_fail"); }
 
 #endif // __USE_ASSEMBLY__
