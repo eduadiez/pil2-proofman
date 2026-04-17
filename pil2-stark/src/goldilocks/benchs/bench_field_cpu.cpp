@@ -1,5 +1,6 @@
 #include <benchmark/benchmark.h>
 #include "../src/goldilocks_base_field.hpp"
+#include "../src/goldilocks_base_field_pack.hpp"
 #ifdef __AVX2__
 #include <immintrin.h>
 #endif
@@ -177,3 +178,46 @@ BENCHMARK(MUL_OP_BENCH)
 BENCHMARK(INV_OP_BENCH)
     ->Unit(benchmark::kMicrosecond)
     ->UseRealTime();
+
+// ---- op_pack microbenches (STARK expression-evaluator hot path) ----
+// NROWS_PACK=128 rows per call; run many calls per iteration to amortize loop.
+static constexpr uint64_t OP_PACK_N = 128;
+static constexpr uint64_t OP_PACK_CALLS = 10000;
+
+static void OP_PACK_ADD_BENCH(benchmark::State &state)
+{
+    alignas(16) Goldilocks::Element a[OP_PACK_N], b[OP_PACK_N], c[OP_PACK_N];
+    for (uint64_t i = 0; i < OP_PACK_N; ++i) { a[i].fe = i * 3 + 1; b[i].fe = i * 5 + 7; }
+    for (auto _ : state) {
+        for (uint64_t k = 0; k < OP_PACK_CALLS; ++k) {
+            Goldilocks::op_pack(OP_PACK_N, 0, c, a, false, b, false);
+            benchmark::DoNotOptimize(c);
+        }
+    }
+}
+static void OP_PACK_SUB_BENCH(benchmark::State &state)
+{
+    alignas(16) Goldilocks::Element a[OP_PACK_N], b[OP_PACK_N], c[OP_PACK_N];
+    for (uint64_t i = 0; i < OP_PACK_N; ++i) { a[i].fe = i * 3 + 1; b[i].fe = i * 5 + 7; }
+    for (auto _ : state) {
+        for (uint64_t k = 0; k < OP_PACK_CALLS; ++k) {
+            Goldilocks::op_pack(OP_PACK_N, 1, c, a, false, b, false);
+            benchmark::DoNotOptimize(c);
+        }
+    }
+}
+static void OP_PACK_MUL_BENCH(benchmark::State &state)
+{
+    alignas(16) Goldilocks::Element a[OP_PACK_N], b[OP_PACK_N], c[OP_PACK_N];
+    for (uint64_t i = 0; i < OP_PACK_N; ++i) { a[i].fe = i * 3 + 1; b[i].fe = i * 5 + 7; }
+    for (auto _ : state) {
+        for (uint64_t k = 0; k < OP_PACK_CALLS; ++k) {
+            Goldilocks::op_pack(OP_PACK_N, 2, c, a, false, b, false);
+            benchmark::DoNotOptimize(c);
+        }
+    }
+}
+
+BENCHMARK(OP_PACK_ADD_BENCH)->Unit(benchmark::kMicrosecond)->UseRealTime();
+BENCHMARK(OP_PACK_SUB_BENCH)->Unit(benchmark::kMicrosecond)->UseRealTime();
+BENCHMARK(OP_PACK_MUL_BENCH)->Unit(benchmark::kMicrosecond)->UseRealTime();
