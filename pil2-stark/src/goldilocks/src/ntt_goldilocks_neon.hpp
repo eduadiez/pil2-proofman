@@ -58,5 +58,26 @@ inline void ntt_neon_butterfly(Goldilocks::Element* a,
     }
 }
 
+// Per-column scalar-multiply: dst[k] = src[k] * scalar, for k in [0, ncols).
+// Used by NTT_iters' "any phase" branch (twiddle-mul) and the INTT
+// last-phase scaling (powTwoInv broadcast). Same NEON pattern as the
+// butterfly — broadcast scalar, two columns per iter, scalar tail.
+inline void ntt_neon_scale(Goldilocks::Element* dst, uint64_t dst_off,
+                           const Goldilocks::Element* src, uint64_t src_off,
+                           Goldilocks::Element scalar, uint64_t ncols)
+{
+    namespace N = Goldilocks_neon;
+    uint64x2_t s_vec = N::splat(scalar.fe);
+
+    uint64_t k = 0;
+    for (; k + 1 < ncols; k += 2) {
+        uint64x2_t v = N::load(&src[src_off + k]);
+        N::store(&dst[dst_off + k], N::gl_mul(v, s_vec));
+    }
+    for (; k < ncols; ++k) {
+        Goldilocks::mul(dst[dst_off + k], src[src_off + k], scalar);
+    }
+}
+
 #endif  // PIL2_HAS_NEON
 #endif  // NTT_GOLDILOCKS_NEON_HPP

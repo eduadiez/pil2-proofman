@@ -13,6 +13,7 @@ Two reference files in this directory:
 | `apple-silicon-m4pro-neon-ntt.txt` | macOS arm64, M4 Pro 14-core | Part 5 Task 43 — NTT/INTT inner butterfly NEON-vectorised | CPU: Scalar (auto picks NEON inside butterfly) + NEON Poseidon2 W=8 |
 | `apple-silicon-m4pro-neon-w4w8.txt` | macOS arm64, M4 Pro 14-core | Part 5 Task 40 — W=4 NEON also wired via Auto | CPU: full Phase B state (NEON Poseidon2 W=4+W=8 + NEON NTT) |
 | `apple-silicon-m4pro-neon-batch.txt` | macOS arm64, M4 Pro 14-core | Part 5 Task 36-37 — 2-sponge NeonBatch impls + benches added (Auto NOT routed) | CPU: Scalar (auto) + Neon + NeonBatch merkletree variants exposed |
+| `apple-silicon-m4pro-neon-intt-scale.txt` | macOS arm64, M4 Pro 14-core | Part 5 Task 45 — INTT last-phase scaling (powTwoInv) + any-phase twiddle vectorised | CPU: NTT family at peak NEON state |
 
 The two files **cannot be row-compared by name** because PR #465 (`refactor:
 reorganize tests/benchmarks into per-area files`) renamed every benchmark
@@ -215,16 +216,25 @@ These are queued as follow-ups, not blockers.
 
 ---
 
-## 3.5b. NTT NEON vs scalar baseline (Task 43)
+## 3.5b. NTT NEON vs scalar baseline (Task 43 + 45)
 
-| Bench | Scalar baseline (`apple-silicon-m4pro-scalar.txt`) | NEON (`apple-silicon-m4pro-neon-ntt.txt`) | Δ |
-|---|---|---|---|
-| `NTT_CPU_BENCH/24`  | 243 ms | **198 ms** | **−18.5%** |
-| `NTT_CPU_BENCH/36`  | 309 ms | **256 ms** | **−17.2%** |
-| `NTT_CPU_BENCH/56`  | 461 ms | **387 ms** | **−16.0%** |
-| `INTT_CPU_BENCH/24` | 251 ms | **212 ms** | **−15.5%** |
-| `INTT_CPU_BENCH/36` | 332 ms | **294 ms** | **−11.4%** |
-| `INTT_CPU_BENCH/56` | 474 ms | **417 ms** | **−12.0%** |
+| Bench | Scalar | NEON Task 43 (butterfly only) | NEON Task 45 (+ scaling) | Total Δ vs Scalar |
+|---|---|---|---|---|
+| `NTT_CPU_BENCH/24`  | 243 ms | 198 ms | **193 ms** | **−20.6%** |
+| `NTT_CPU_BENCH/36`  | 309 ms | 256 ms | **255 ms** | **−17.5%** |
+| `NTT_CPU_BENCH/56`  | 461 ms | 387 ms | **358 ms** | **−22.3%** |
+| `INTT_CPU_BENCH/24` | 251 ms | 212 ms | **196 ms** | **−21.9%** |
+| `INTT_CPU_BENCH/36` | 332 ms | 294 ms | **274 ms** | **−17.5%** |
+| `INTT_CPU_BENCH/56` | 474 ms | 417 ms | **399 ms** | **−15.8%** |
+| `LDE_CPU_BENCH/24`  | 302 ms | 255 ms | **252 ms** | **−16.6%** |
+| `LDE_CPU_BENCH/56`  | 557 ms | 461 ms | **475 ms** | **−14.7%** |
+
+The Task 45 incremental win came from vectorising the per-column
+scalar-multiply at the last NTT phase (`Goldilocks::mul(...,
+powTwoInv[])` on the inverse path; `Goldilocks::mul(..., r_[dsty])` on
+the forward "any phase" path). Same NEON pattern as the butterfly:
+broadcast scalar via splat, two columns per iter, scalar tail for odd
+ncols.
 
 **Honest read:** unlike Poseidon2, the NTT inner butterfly is structurally a
 clean fit for NEON: two consecutive columns share a twiddle, sit adjacent

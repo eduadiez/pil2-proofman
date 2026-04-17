@@ -173,13 +173,17 @@ void NTT_Goldilocks::NTT_iters(Goldilocks::Element *dst, Goldilocks::Element *sr
                         uint64_t dsty = intt_idx((x * nBatches + b), nrows);
                         uint64_t offset_a2 = dsty * strideA2 + offsetA2;
                         uint64_t offset_a = (b * batchSize + x) * strideA + offsetA;
+#if PIL2_HAS_NEON
+                        ntt_neon_scale(a2, offset_a2, a, offset_a, r_[dsty], ncols);
+#else
                         for (uint64_t k = 0; k < ncols; k++)
                         {
                             Goldilocks::mul(a2[offset_a2 + k], a[offset_a + k], r_[dsty]);
                         }
+#endif
                     }
                 }
-                else 
+                else
                 {
                     //case: last phase and inverse
                     assert(inverse);
@@ -188,10 +192,14 @@ void NTT_Goldilocks::NTT_iters(Goldilocks::Element *dst, Goldilocks::Element *sr
                         uint64_t dsty = intt_idx((x * nBatches + b), nrows);
                         uint64_t offset_a2 = dsty * strideA2 + offsetA2;
                         uint64_t offset_a = (b * batchSize + x) * strideA + offsetA;
+#if PIL2_HAS_NEON
+                        ntt_neon_scale(a2, offset_a2, a, offset_a, powTwoInv[domainPow], ncols);
+#else
                         for (uint64_t k = 0; k < ncols; k++)
                         {
                             Goldilocks::mul(a2[offset_a2 + k], a[offset_a + k], powTwoInv[domainPow]);
                         }
+#endif
                     }
                 }
             }
