@@ -132,9 +132,39 @@ extern "C" void Fr_rawAdd(FrRawElement r, const FrRawElement a, const FrRawEleme
     Fr_rawCopy(r, borrow == 0 ? diff : sum);
 }
 
-// ---- Stubs still pending (Tasks 19-21) -----------------------------------
+// Modular subtraction. For canonical inputs a, b in [0, p) the 4-limb
+// difference is in (-p, p); if it underflows (borrow out of MSB), add p
+// back to land in [0, p).
+extern "C" void Fr_rawSub(FrRawElement r, const FrRawElement a, const FrRawElement b) {
+    uint64_t diff[Fr_N64];
+    int64_t borrow = 0;
+    for (int i = 0; i < Fr_N64; i++) {
+        __int128 d = (__int128)a[i] - b[i] - borrow;
+        if (d < 0) {
+            diff[i] = (uint64_t)(d + ((__int128)1 << 64));
+            borrow = 1;
+        } else {
+            diff[i] = (uint64_t)d;
+            borrow = 0;
+        }
+    }
+    if (borrow == 0) {
+        Fr_rawCopy(r, diff);
+        return;
+    }
+    // Underflow: result is (a - b) + 2^256 in `diff`; adding p (mod 2^256)
+    // recovers the canonical (a - b + p) since p < 2^256 and the high bit
+    // cancels with the synthetic 2^256.
+    __uint128_t carry = 0;
+    for (int i = 0; i < Fr_N64; i++) {
+        __uint128_t s = (__uint128_t)diff[i] + Fr_rawq[i] + carry;
+        r[i] = (uint64_t)s;
+        carry = s >> 64;
+    }
+    (void)carry;  // discarded — represents the cancelling 2^256
+}
 
-extern "C" void Fr_rawSub(FrRawElement, const FrRawElement, const FrRawElement)                       { Fr_cios_stub("Fr_rawSub"); }
+// ---- Stubs still pending (Tasks 20-21) -----------------------------------
 extern "C" void Fr_rawMMul(FrRawElement, const FrRawElement, const FrRawElement)                      { Fr_cios_stub("Fr_rawMMul"); }
 extern "C" void Fr_rawMSquare(FrRawElement, const FrRawElement)                                       { Fr_cios_stub("Fr_rawMSquare"); }
 extern "C" void Fr_rawMMul1(FrRawElement, const FrRawElement, uint64_t)                               { Fr_cios_stub("Fr_rawMMul1"); }

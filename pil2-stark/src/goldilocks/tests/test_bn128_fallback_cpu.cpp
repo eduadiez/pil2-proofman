@@ -137,6 +137,52 @@ TEST(Fr_rawAdd, sample_pair_sweep_matches_gmp) {
     }
 }
 
+TEST(Fr_rawSub, sample_pair_sweep_matches_gmp) {
+    const mpz_class p = fr_modulus();
+    for (int i = 0; i < N_SAMPLES; i++) {
+        for (int j = 0; j < N_SAMPLES; j++) {
+            FrRawElement a, b, r;
+            from_mpz(a, sample(i));
+            from_mpz(b, sample(j));
+            Fr_rawSub(r, a, b);
+            // Mathematical mod (always non-negative); GMP's % follows sign of dividend.
+            mpz_class expected = (sample(i) - sample(j)) % p;
+            if (expected < 0) expected += p;
+            EXPECT_EQ(to_mpz(r), expected)
+                << "sample (" << i << ", " << j << ")";
+        }
+    }
+}
+
+TEST(Fr_rawSub, edge_cases_around_modulus) {
+    const mpz_class p = fr_modulus();
+    FrRawElement a, b, r;
+
+    // 0 - 1 == p - 1 (underflow path)
+    from_mpz(a, mpz_class(0));
+    from_mpz(b, mpz_class(1));
+    Fr_rawSub(r, a, b);
+    EXPECT_EQ(to_mpz(r), p - 1) << "0 - 1";
+
+    // (p-1) - (p-1) == 0
+    from_mpz(a, p - 1);
+    from_mpz(b, p - 1);
+    Fr_rawSub(r, a, b);
+    EXPECT_EQ(to_mpz(r), mpz_class(0)) << "(p-1) - (p-1)";
+
+    // 0 - 0 == 0
+    from_mpz(a, mpz_class(0));
+    from_mpz(b, mpz_class(0));
+    Fr_rawSub(r, a, b);
+    EXPECT_EQ(to_mpz(r), mpz_class(0)) << "0 - 0";
+
+    // 1 - (p-1) == 2  (since (p-1) ≡ -1, so 1 - (-1) = 2)
+    from_mpz(a, mpz_class(1));
+    from_mpz(b, p - 1);
+    Fr_rawSub(r, a, b);
+    EXPECT_EQ(to_mpz(r), mpz_class(2)) << "1 - (p-1)";
+}
+
 TEST(Fr_rawAdd, edge_cases_around_modulus) {
     const mpz_class p = fr_modulus();
     FrRawElement a, b, r;
