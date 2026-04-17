@@ -165,6 +165,43 @@ TEST(Poseidon2Neon_W8, compress_neon_matches_COMPRESS_W8_GOLDEN) {
     }
 }
 
+// W=4 — grinding hot path (single permutation in a leading-zero search loop).
+TEST(Poseidon2Neon_W4, permute_neon_matches_PERMUTE_W4_GOLDEN) {
+    Goldilocks::Element input[4];
+    for (int i = 0; i < 4; ++i) input[i].fe = i;
+    Goldilocks::Element out[4];
+    Poseidon2Goldilocks<4>::permute(out, input, Poseidon2Mode::Neon);
+    for (int i = 0; i < 4; ++i) {
+        EXPECT_EQ(out[i].fe, GoldilocksTestData::PERMUTE_W4_GOLDEN[i])
+            << "element " << i;
+    }
+}
+
+TEST(Poseidon2Neon_W4, compress_neon_matches_COMPRESS_W4_GOLDEN) {
+    Goldilocks::Element input[4];
+    for (int i = 0; i < 4; ++i) input[i].fe = i;
+    Goldilocks::Element state[Poseidon2Goldilocks<4>::CAPACITY];
+    Poseidon2Goldilocks<4>::compress(state, input, Poseidon2Mode::Neon);
+    for (int i = 0; i < (int)Poseidon2Goldilocks<4>::CAPACITY; ++i) {
+        EXPECT_EQ(state[i].fe, GoldilocksTestData::COMPRESS_W4_GOLDEN[i])
+            << "element " << i;
+    }
+}
+
+TEST(Poseidon2Neon_W4, permute_neon_matches_permute_seq_random) {
+    auto rng = make_rng(0x44444444'aaaaaaaaULL);
+    for (int iter = 0; iter < 32; ++iter) {
+        Goldilocks::Element input[4];
+        for (int i = 0; i < 4; ++i) input[i].fe = random_field(rng);
+        Goldilocks::Element out_seq[4], out_neon[4];
+        Poseidon2Goldilocks<4>::permute(out_seq,  input, Poseidon2Mode::Scalar);
+        Poseidon2Goldilocks<4>::permute(out_neon, input, Poseidon2Mode::Neon);
+        for (int i = 0; i < 4; ++i)
+            EXPECT_EQ(out_neon[i].fe, out_seq[i].fe)
+                << "iter " << iter << " element " << i;
+    }
+}
+
 // W=12 — production merkletree hot path (arity 3).
 TEST(Poseidon2Neon_W12, permute_neon_matches_PERMUTE_W12_GOLDEN) {
     Goldilocks::Element input[12];

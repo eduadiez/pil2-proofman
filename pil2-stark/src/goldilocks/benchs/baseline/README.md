@@ -11,6 +11,7 @@ Two reference files in this directory:
 | `apple-silicon-m4pro-neon-w8-paired.txt` | macOS arm64, M4 Pro 14-core | Part 5 Task 35.5 — paired-asm gl_mul | CPU: Scalar + NEON W=8 (paired) |
 | `apple-silicon-m4pro-neon-vectorized-add.txt` | macOS arm64, M4 Pro 14-core | Part 5 Task 38d — gl_add/gl_sub vectorised; matmul_external still punts | CPU: Scalar + NEON W=8/12/16 |
 | `apple-silicon-m4pro-neon-ntt.txt` | macOS arm64, M4 Pro 14-core | Part 5 Task 43 — NTT/INTT inner butterfly NEON-vectorised | CPU: Scalar (auto picks NEON inside butterfly) + NEON Poseidon2 W=8 |
+| `apple-silicon-m4pro-neon-w4w8.txt` | macOS arm64, M4 Pro 14-core | Part 5 Task 40 — W=4 NEON also wired via Auto | CPU: full Phase B state (NEON Poseidon2 W=4+W=8 + NEON NTT) |
 
 The two files **cannot be row-compared by name** because PR #465 (`refactor:
 reorganize tests/benchmarks into per-area files`) renamed every benchmark
@@ -155,6 +156,29 @@ The path to a bigger win:
 
 These are queued as Phase B follow-ups, not blockers for the bit-exact
 gate.
+
+---
+
+## 3.5a. W=4 NEON vs scalar (Task 40)
+
+| Bench | Scalar | NEON | Δ |
+|---|---|---|---|
+| `PERMUTE_W4`  | 110 ms | 99.9 ms | **−9.2%** |
+| `COMPRESS_W4` | 110 ms | 99.7 ms | **−9.4%** |
+
+Grinding (which runs PERMUTE_W4 inside a leading-zero search loop) shows
+mixed numbers (`/20`, `/24` win ~7-9%; `/21` looks like variance). This is
+expected — grinding's runtime depends on how quickly a satisfying nonce
+appears, not just per-permutation cost. The micro-bench is the reliable
+signal.
+
+W=4 won where W=12/W=16 lost because at W=4 there's only ONE M4 chunk and
+no cross-chunk sum (the `if (SPONGE_WIDTH > 4)` short-circuits), so the
+matmul punt is much cheaper. NEON wins on the pow7add side aren't diluted
+by scalar matmul overhead.
+
+Auto resolution on Darwin now picks NEON for both W=4 AND W=8.
+W=12 / W=16 still fall back to Scalar pending matmul vectorisation.
 
 ---
 
