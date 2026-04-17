@@ -1,11 +1,12 @@
 #ifndef POSEIDON2_GOLDILOCKS
 #define POSEIDON2_GOLDILOCKS
 
+#include "platform.hpp"
 #include "poseidon2_goldilocks_constants.hpp"
 #include "goldilocks_base_field.hpp"
 #include <cstdio>
 #include <cstdlib>
-#ifdef __AVX2__
+#if PIL2_HAS_AVX2
 #include <immintrin.h>
 #endif
 
@@ -59,7 +60,7 @@ private:
     inline void static prodadd_(Goldilocks::Element *x, const Goldilocks::Element D[SPONGE_WIDTH], const Goldilocks::Element &sum);
     inline void static matmul_m4_(Goldilocks::Element *x);
     inline void static matmul_external_(Goldilocks::Element *x);
-#ifdef __AVX2__
+#if PIL2_HAS_AVX2
     inline void static add_avx(__m256i st[(SPONGE_WIDTH >> 2)], const Goldilocks::Element C[SPONGE_WIDTH]);
     inline void static pow7_avx(__m256i st[(SPONGE_WIDTH >> 2)]);
     inline void static add_avx_small(__m256i st[(SPONGE_WIDTH >> 2)], const Goldilocks::Element C[SPONGE_WIDTH]);
@@ -69,7 +70,7 @@ private:
     inline void static pow7add_avx(__m256i *x, const Goldilocks::Element C_[SPONGE_WIDTH]);
     inline void static element_pow7_avx(__m256i &x);
 #endif
-#ifdef __AVX512__
+#if PIL2_HAS_AVX512
     inline void static matmul_external_batch_avx512(__m512i *x);
     inline void static matmul_m4_batch_avx512(__m512i &st0, __m512i &st1, __m512i &st2, __m512i &st3);
     inline void static pow7add_avx512(__m512i *x, const Goldilocks::Element C_[SPONGE_WIDTH]);
@@ -112,7 +113,7 @@ private:
                                uint64_t num_cols, uint64_t num_rows, uint64_t arity,
                                int nThreads = 0, uint64_t dim = 1);
 
-#ifdef __AVX2__
+#if PIL2_HAS_AVX2
     // AVX2 single-sponge:
     static void permute_avx(Goldilocks::Element *, const Goldilocks::Element *);
     static void compress_avx(Goldilocks::Element (&state)[CAPACITY],
@@ -130,7 +131,7 @@ private:
                                      uint64_t num_cols, uint64_t num_rows, uint64_t arity,
                                      int nThreads = 0, uint64_t dim = 1);
 #endif
-#ifdef __AVX512__
+#if PIL2_HAS_AVX512
     // AVX512 8-lane batch (single-sponge AVX512 is intentionally not
     // implemented — see Poseidon2Mode enum comment).
     static void permute_batch_avx512(Goldilocks::Element *, const Goldilocks::Element *);
@@ -269,7 +270,7 @@ inline void Poseidon2Goldilocks<W>::permute(
     Goldilocks::Element *output, const Goldilocks::Element *input, Poseidon2Mode mode)
 {
     if (mode == Poseidon2Mode::Auto) {
-#ifdef __AVX2__
+#if PIL2_HAS_AVX2
         mode = Poseidon2Mode::Avx;
 #else
         mode = Poseidon2Mode::Scalar;
@@ -277,7 +278,7 @@ inline void Poseidon2Goldilocks<W>::permute(
     }
     switch (mode) {
         case Poseidon2Mode::Scalar: permute_seq(output, input); return;
-#ifdef __AVX2__
+#if PIL2_HAS_AVX2
         case Poseidon2Mode::Avx:    permute_avx(output, input); return;
 #endif
         default: break;
@@ -292,7 +293,7 @@ inline void Poseidon2Goldilocks<W>::compress(
     Poseidon2Mode mode)
 {
     if (mode == Poseidon2Mode::Auto) {
-#ifdef __AVX2__
+#if PIL2_HAS_AVX2
         mode = Poseidon2Mode::Avx;
 #else
         mode = Poseidon2Mode::Scalar;
@@ -300,7 +301,7 @@ inline void Poseidon2Goldilocks<W>::compress(
     }
     switch (mode) {
         case Poseidon2Mode::Scalar: compress_seq(state, input); return;
-#ifdef __AVX2__
+#if PIL2_HAS_AVX2
         case Poseidon2Mode::Avx:    compress_avx(state, input); return;
 #endif
         default: break;
@@ -313,7 +314,7 @@ inline void Poseidon2Goldilocks<W>::linearHash(
     Goldilocks::Element *output, Goldilocks::Element *input, uint64_t size, Poseidon2Mode mode)
 {
     if (mode == Poseidon2Mode::Auto) {
-#ifdef __AVX2__
+#if PIL2_HAS_AVX2
         mode = Poseidon2Mode::Avx;
 #else
         mode = Poseidon2Mode::Scalar;
@@ -321,7 +322,7 @@ inline void Poseidon2Goldilocks<W>::linearHash(
     }
     switch (mode) {
         case Poseidon2Mode::Scalar: linear_hash_seq(output, input, size); return;
-#ifdef __AVX2__
+#if PIL2_HAS_AVX2
         case Poseidon2Mode::Avx:    linear_hash_avx(output, input, size); return;
 #endif
         // AvxBatch / Avx512Batch have a 4/8-row contract and are not callable
@@ -339,9 +340,9 @@ inline void Poseidon2Goldilocks<W>::merkletree(
     int nThreads, uint64_t dim, Poseidon2Mode mode)
 {
     if (mode == Poseidon2Mode::Auto) {
-#ifdef __AVX512__
+#if PIL2_HAS_AVX512
         mode = Poseidon2Mode::Avx512Batch;
-#elif defined(__AVX2__)
+#elif PIL2_HAS_AVX2
         mode = Poseidon2Mode::AvxBatch;
 #else
         mode = Poseidon2Mode::Scalar;
@@ -350,13 +351,13 @@ inline void Poseidon2Goldilocks<W>::merkletree(
     switch (mode) {
         case Poseidon2Mode::Scalar:
             merkletree_seq(tree, input, num_cols, num_rows, arity, nThreads, dim); return;
-#ifdef __AVX2__
+#if PIL2_HAS_AVX2
         case Poseidon2Mode::Avx:
             merkletree_avx(tree, input, num_cols, num_rows, arity, nThreads, dim); return;
         case Poseidon2Mode::AvxBatch:
             merkletree_batch_avx(tree, input, num_cols, num_rows, arity, nThreads, dim); return;
 #endif
-#ifdef __AVX512__
+#if PIL2_HAS_AVX512
         case Poseidon2Mode::Avx512Batch:
             merkletree_batch_avx512(tree, input, num_cols, num_rows, arity, nThreads, dim); return;
 #endif
@@ -368,7 +369,7 @@ inline void Poseidon2Goldilocks<W>::merkletree(
 
 #include "poseidon2_goldilocks_avx.hpp"
 
-#ifdef __AVX512__
+#if PIL2_HAS_AVX512
  #include "poseidon2_goldilocks_avx512.hpp"
  #endif
 
