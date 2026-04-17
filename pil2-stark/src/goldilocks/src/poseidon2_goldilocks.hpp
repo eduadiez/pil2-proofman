@@ -36,6 +36,8 @@ enum class Poseidon2Mode : uint8_t {
     AvxBatch,        // backs merkletree_batch_avx, linear_hash_batch_avx (internal 4-row contract)
     Avx512,          // reserved; single-sponge AVX512 is intentionally not implemented (see above)
     Avx512Batch,     // backs merkletree_batch_avx512 (internal 8-row contract)
+    Neon,            // arm64 NEON single-sponge (Part 5)
+    NeonBatch,       // arm64 NEON batched merkletree (internal 4-row contract, mirrors AvxBatch)
 };
 
 
@@ -255,7 +257,7 @@ inline void Poseidon2Goldilocks<SPONGE_WIDTH_T>::compress_seq(Goldilocks::Elemen
 template<uint32_t W>
 [[noreturn]] inline void Poseidon2Goldilocks<W>::abortMode(const char *op, Poseidon2Mode m)
 {
-    static const char *names[] = { "Auto", "Scalar", "Avx", "AvxBatch", "Avx512", "Avx512Batch" };
+    static const char *names[] = { "Auto", "Scalar", "Avx", "AvxBatch", "Avx512", "Avx512Batch", "Neon", "NeonBatch" };
     int idx = static_cast<int>(m);
     const char *name = (idx >= 0 && idx < (int)(sizeof(names) / sizeof(*names))) ? names[idx] : "<unknown>";
     std::fprintf(stderr,
