@@ -10,6 +10,7 @@ Two reference files in this directory:
 | `apple-silicon-m4pro-neon-w8.txt` | macOS arm64, M4 Pro 14-core | Part 5 Task 35 — NEON W=8 wired (naive per-lane gl_mul) | CPU: Scalar + NEON W=8 |
 | `apple-silicon-m4pro-neon-w8-paired.txt` | macOS arm64, M4 Pro 14-core | Part 5 Task 35.5 — paired-asm gl_mul | CPU: Scalar + NEON W=8 (paired) |
 | `apple-silicon-m4pro-neon-vectorized-add.txt` | macOS arm64, M4 Pro 14-core | Part 5 Task 38d — gl_add/gl_sub vectorised; matmul_external still punts | CPU: Scalar + NEON W=8/12/16 |
+| `apple-silicon-m4pro-neon-ntt.txt` | macOS arm64, M4 Pro 14-core | Part 5 Task 43 — NTT/INTT inner butterfly NEON-vectorised | CPU: Scalar (auto picks NEON inside butterfly) + NEON Poseidon2 W=8 |
 
 The two files **cannot be row-compared by name** because PR #465 (`refactor:
 reorganize tests/benchmarks into per-area files`) renamed every benchmark
@@ -154,6 +155,32 @@ The path to a bigger win:
 
 These are queued as Phase B follow-ups, not blockers for the bit-exact
 gate.
+
+---
+
+## 3.5b. NTT NEON vs scalar baseline (Task 43)
+
+| Bench | Scalar baseline (`apple-silicon-m4pro-scalar.txt`) | NEON (`apple-silicon-m4pro-neon-ntt.txt`) | Δ |
+|---|---|---|---|
+| `NTT_CPU_BENCH/24`  | 243 ms | **198 ms** | **−18.5%** |
+| `NTT_CPU_BENCH/36`  | 309 ms | **256 ms** | **−17.2%** |
+| `NTT_CPU_BENCH/56`  | 461 ms | **387 ms** | **−16.0%** |
+| `INTT_CPU_BENCH/24` | 251 ms | **212 ms** | **−15.5%** |
+| `INTT_CPU_BENCH/36` | 332 ms | **294 ms** | **−11.4%** |
+| `INTT_CPU_BENCH/56` | 474 ms | **417 ms** | **−12.0%** |
+
+**Honest read:** unlike Poseidon2, the NTT inner butterfly is structurally a
+clean fit for NEON: two consecutive columns share a twiddle, sit adjacent
+in memory, and need only `gl_mul / gl_add / gl_sub` per pair. No
+lane-shuffles, no wide-state matmul punt, no per-iteration scalar work
+mixed in. Result: a clean 12-18% win across all NTT/INTT/LDE shapes
+(low cv 0.7-3.4%).
+
+The NTT NEON path is on by default at compile time when `PIL2_HAS_NEON`
+is defined — there is no `Mode::Neon` selector for NTT today (the
+butterfly is the only inner-loop hot path; one fast path replaces the
+scalar one entirely). LDE_CPU_BENCH inherits the NTT win since it's
+NTT + extension internally.
 
 ---
 

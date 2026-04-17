@@ -1,4 +1,8 @@
 #include "ntt_goldilocks.hpp"
+#include "platform.hpp"
+#if PIL2_HAS_NEON
+#include "ntt_goldilocks_neon.hpp"
+#endif
 
 //Explicar extend parameter
 //Explicar inverse parameter
@@ -135,6 +139,9 @@ void NTT_Goldilocks::NTT_iters(Goldilocks::Element *dst, Goldilocks::Element *sr
                     j = j % mdiv2;
 
                     Goldilocks::Element w = root(s + si, j);
+#if PIL2_HAS_NEON
+                    ntt_neon_butterfly(a, offset1, offset2, w, ncols);
+#else
                     for (uint64_t k = 0; k < ncols; ++k)
                     {
                         Goldilocks::Element t = w * a[offset1 + k];
@@ -143,6 +150,7 @@ void NTT_Goldilocks::NTT_iters(Goldilocks::Element *dst, Goldilocks::Element *sr
                         Goldilocks::add(a[offset2 + k], t, u);
                         Goldilocks::sub(a[offset1 + k], u, t);
                     }
+#endif
                 }
             }
             if (s + maxBatchPow <= domainPow || !inverse)
