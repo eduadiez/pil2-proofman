@@ -183,6 +183,70 @@ TEST(Fr_rawSub, edge_cases_around_modulus) {
     EXPECT_EQ(to_mpz(r), mpz_class(2)) << "1 - (p-1)";
 }
 
+// Helper: R^-1 mod p, computed once via GMP. R = 2^256.
+mpz_class fr_R_inv() {
+    static mpz_class cached;
+    static bool init = false;
+    if (!init) {
+        const mpz_class p = fr_modulus();
+        mpz_class R = mpz_class(1) << 256;
+        mpz_invert(cached.get_mpz_t(), R.get_mpz_t(), p.get_mpz_t());
+        init = true;
+    }
+    return cached;
+}
+
+TEST(Fr_rawMMul, sample_pair_sweep_matches_gmp) {
+    const mpz_class p = fr_modulus();
+    const mpz_class R_inv = fr_R_inv();
+    for (int i = 0; i < N_SAMPLES; i++) {
+        for (int j = 0; j < N_SAMPLES; j++) {
+            FrRawElement a, b, r;
+            from_mpz(a, sample(i));
+            from_mpz(b, sample(j));
+            Fr_rawMMul(r, a, b);
+            const mpz_class expected = (sample(i) * sample(j) * R_inv) % p;
+            EXPECT_EQ(to_mpz(r), expected)
+                << "MMul sample (" << i << ", " << j << ")";
+        }
+    }
+}
+
+TEST(Fr_rawMMul, edge_cases) {
+    const mpz_class p = fr_modulus();
+    const mpz_class R_inv = fr_R_inv();
+    FrRawElement a, b, r;
+
+    // 0 * x == 0 in Montgomery form (and natural)
+    from_mpz(a, mpz_class(0));
+    from_mpz(b, p - 1);
+    Fr_rawMMul(r, a, b);
+    EXPECT_EQ(to_mpz(r), mpz_class(0)) << "0 * (p-1)";
+
+    // (p-1) * (p-1) = (p^2 - 2p + 1); MMul scales by R^-1
+    from_mpz(a, p - 1);
+    from_mpz(b, p - 1);
+    Fr_rawMMul(r, a, b);
+    EXPECT_EQ(to_mpz(r), ((p - 1) * (p - 1) * R_inv) % p) << "(p-1)^2";
+
+    // R^2 mod p (the constant we baked in) acts as the identity for
+    // converting natural -> Montgomery: MMul(x, R^2) == x * R mod p.
+    // Quick spot-check: MMul(1, R^2) == R mod p.
+    from_mpz(a, mpz_class(1));
+    Fr_rawMMul(r, a, Fr_R2);
+    EXPECT_EQ(to_mpz(r), (mpz_class(1) << 256) % p) << "1 * R^2";
+}
+
+TEST(Fr_rawMSquare, matches_MMul_with_self) {
+    for (int i = 0; i < N_SAMPLES; i++) {
+        FrRawElement a, sq, mul;
+        from_mpz(a, sample(i));
+        Fr_rawMSquare(sq, a);
+        Fr_rawMMul(mul, a, a);
+        EXPECT_EQ(to_mpz(sq), to_mpz(mul)) << "sample " << i;
+    }
+}
+
 TEST(Fr_rawAdd, edge_cases_around_modulus) {
     const mpz_class p = fr_modulus();
     FrRawElement a, b, r;

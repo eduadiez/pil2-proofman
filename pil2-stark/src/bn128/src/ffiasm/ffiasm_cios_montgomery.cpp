@@ -164,9 +164,80 @@ extern "C" void Fr_rawSub(FrRawElement r, const FrRawElement a, const FrRawEleme
     (void)carry;  // discarded — represents the cancelling 2^256
 }
 
-// ---- Stubs still pending (Tasks 20-21) -----------------------------------
-extern "C" void Fr_rawMMul(FrRawElement, const FrRawElement, const FrRawElement)                      { Fr_cios_stub("Fr_rawMMul"); }
-extern "C" void Fr_rawMSquare(FrRawElement, const FrRawElement)                                       { Fr_cios_stub("Fr_rawMSquare"); }
+// CIOS (Coarsely Integrated Operand Scanning) Montgomery multiplication.
+// Reference: Koc, Acar, Kaliski, "Analyzing and Comparing Montgomery
+// Multiplication Algorithms" (IEEE Micro, 1996), Algorithm CIOS.
+//
+// Computes r = a * b * R^-1 mod p, where R = 2^(64*N) = 2^256.
+// Inputs a, b assumed in canonical [0, p). Result is canonical.
+//
+// The accumulator T is (N+2) limbs wide: N + 1 for the partial product
+// and one extra to absorb the carry-out from the inner multiply-add.
+extern "C" void Fr_rawMMul(FrRawElement r, const FrRawElement a, const FrRawElement b) {
+    uint64_t T[Fr_N64 + 2] = {0, 0, 0, 0, 0, 0};
+
+    for (int i = 0; i < Fr_N64; i++) {
+        // Phase 1: T += a * b[i]
+        uint64_t C = 0;
+        for (int j = 0; j < Fr_N64; j++) {
+            __uint128_t s = (__uint128_t)T[j] + (__uint128_t)a[j] * b[i] + C;
+            T[j] = (uint64_t)s;
+            C = (uint64_t)(s >> 64);
+        }
+        // Propagate the final carry into T[N] / T[N+1].
+        __uint128_t s = (__uint128_t)T[Fr_N64] + C;
+        T[Fr_N64]     = (uint64_t)s;
+        T[Fr_N64 + 1] = (uint64_t)(s >> 64);
+
+        // Phase 2: m = T[0] * n0 mod 2^64. This is the magic value that
+        // makes T[0] + m*p[0] divisible by 2^64, clearing the low limb.
+        uint64_t m = T[0] * FR_N0;  // implicit mod 2^64
+
+        // Phase 3: T = (T + m*p) >> 64. The low limb of (T[0] + m*p[0])
+        // is zero by construction, so we discard it and shift the rest
+        // down by one word.
+        s = (__uint128_t)T[0] + (__uint128_t)m * Fr_rawq[0];
+        // (uint64_t)s == 0 here; only the carry matters.
+        C = (uint64_t)(s >> 64);
+        for (int j = 1; j < Fr_N64; j++) {
+            s = (__uint128_t)T[j] + (__uint128_t)m * Fr_rawq[j] + C;
+            T[j - 1] = (uint64_t)s;  // shifted-down store
+            C = (uint64_t)(s >> 64);
+        }
+        s = (__uint128_t)T[Fr_N64] + C;
+        T[Fr_N64 - 1] = (uint64_t)s;
+        T[Fr_N64]     = T[Fr_N64 + 1] + (uint64_t)(s >> 64);
+        T[Fr_N64 + 1] = 0;
+    }
+
+    // After N iterations T[0..N-1] is in [0, 2p) and T[N] is 0 or 1.
+    // Compute T - p; if no borrow (i.e. T >= p) or T[N] was 1, use the
+    // reduced value; otherwise keep T.
+    uint64_t diff[Fr_N64];
+    int64_t borrow = 0;
+    for (int i = 0; i < Fr_N64; i++) {
+        __int128 d = (__int128)T[i] - Fr_rawq[i] - borrow;
+        if (d < 0) {
+            diff[i] = (uint64_t)(d + ((__int128)1 << 64));
+            borrow = 1;
+        } else {
+            diff[i] = (uint64_t)d;
+            borrow = 0;
+        }
+    }
+    const bool use_diff = (T[Fr_N64] != 0) || (borrow == 0);
+    Fr_rawCopy(r, use_diff ? diff : T);
+}
+
+// Squaring is just MMul(a, a). A dedicated squarer would save ~25% (the
+// off-diagonal limb products are computed twice in the multiply path),
+// but correctness comes first; specialise later if it shows up in profiles.
+extern "C" void Fr_rawMSquare(FrRawElement r, const FrRawElement a) {
+    Fr_rawMMul(r, a, a);
+}
+
+// ---- Stubs still pending (Task 21) ---------------------------------------
+
 extern "C" void Fr_rawMMul1(FrRawElement, const FrRawElement, uint64_t)                               { Fr_cios_stub("Fr_rawMMul1"); }
 extern "C" void Fr_rawToMontgomery(FrRawElement, const FrRawElement&)                                 { Fr_cios_stub("Fr_rawToMontgomery"); }
 extern "C" void Fr_rawFromMontgomery(FrRawElement, const FrRawElement&)                               { Fr_cios_stub("Fr_rawFromMontgomery"); }
