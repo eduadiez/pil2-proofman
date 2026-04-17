@@ -14,12 +14,23 @@ ifeq ($(UNAME_S),Darwin)
     HOMEBREW_PREFIX := $(shell brew --prefix)
     CXX      = clang++
     SDKPATH  = /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk
-    CXXFLAGS = -std=c++17 -Wall -pthread -O3 -I./src -I$(HOMEBREW_PREFIX)/include -I$(HOMEBREW_PREFIX)/opt/libomp/include -isysroot $(SDKPATH) -Xpreprocessor -fopenmp
+    CXXFLAGS = -std=c++17 -Wall -pthread -O3 -I./src -I../bn128/src/ffiasm -I$(HOMEBREW_PREFIX)/include -I$(HOMEBREW_PREFIX)/opt/libomp/include -isysroot $(SDKPATH) -Xpreprocessor -fopenmp
     CPPFLAGS = -isysroot $(SDKPATH)
     LDFLAGS  = -L$(HOMEBREW_PREFIX)/lib -L$(HOMEBREW_PREFIX)/opt/libomp/lib -L$(SDKPATH)/usr/lib
     LDLIBS_COMMON = -lomp -lgmpxx -lgmp -lpthread
     LDLIBS_TEST   = $(LDLIBS_COMMON) -lgtest -lgtest_main
     LDLIBS_BENCH  = $(LDLIBS_COMMON) -lbenchmark -lbenchmark_main
+
+    # bn128 CIOS Montgomery fallback — Darwin-only; provides the Fr_raw*
+    # symbols otherwise supplied by the .asm files (which we don't compile
+    # here). Linked into testscpu so test_bn128_fallback_cpu.cpp can verify
+    # the fallback against GMP as the oracle.
+    CIOS_OBJ := $(BUILD_DIR)/ffiasm_cios_montgomery.o
+    EXTRA_TEST_OBJS := $(CIOS_OBJ)
+
+    $(CIOS_OBJ): ../bn128/src/ffiasm/ffiasm_cios_montgomery.cpp
+		$(MKDIR_P) $(dir $@)
+		$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $< -o $@
 endif
 
 ifeq ($(UNAME_S),Linux)
@@ -116,8 +127,8 @@ else
 all: testscpu benchscpu
 endif
 
-testscpu: $(OBJS) $(TEST_OBJS)
-	$(CXX) $(OBJS) $(TEST_OBJS) $(LDFLAGS) $(LDLIBS_TEST) -o $@
+testscpu: $(OBJS) $(TEST_OBJS) $(EXTRA_TEST_OBJS)
+	$(CXX) $(OBJS) $(TEST_OBJS) $(EXTRA_TEST_OBJS) $(LDFLAGS) $(LDLIBS_TEST) -o $@
 
 benchscpu: $(BENCH_OBJS) $(OBJS)
 	$(CXX) $(BENCH_OBJS) $(OBJS) $(LDFLAGS) $(LDLIBS_BENCH) -o $@

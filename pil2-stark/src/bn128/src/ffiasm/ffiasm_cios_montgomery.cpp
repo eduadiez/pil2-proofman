@@ -54,17 +54,58 @@ const uint64_t Fr_R2[Fr_N64] = {
     std::abort();
 }
 
-extern "C" void Fr_rawCopy(FrRawElement, const FrRawElement)                                          { Fr_cios_stub("Fr_rawCopy"); }
-extern "C" void Fr_rawSwap(FrRawElement, FrRawElement)                                                { Fr_cios_stub("Fr_rawSwap"); }
+// ---- Trivial limb-level ops (no Montgomery arithmetic) -------------------
+
+extern "C" void Fr_rawCopy(FrRawElement r, const FrRawElement a) {
+    r[0] = a[0]; r[1] = a[1]; r[2] = a[2]; r[3] = a[3];
+}
+
+extern "C" void Fr_rawSwap(FrRawElement a, FrRawElement b) {
+    for (int i = 0; i < Fr_N64; i++) {
+        uint64_t tmp = a[i];
+        a[i] = b[i];
+        b[i] = tmp;
+    }
+}
+
+extern "C" int Fr_rawIsEq(const FrRawElement a, const FrRawElement b) {
+    return (a[0] == b[0] && a[1] == b[1] && a[2] == b[2] && a[3] == b[3]) ? 1 : 0;
+}
+
+extern "C" int Fr_rawIsZero(const FrRawElement a) {
+    return (a[0] == 0 && a[1] == 0 && a[2] == 0 && a[3] == 0) ? 1 : 0;
+}
+
+// Additive inverse mod p. For canonical input a in [0, p), returns
+// (p - a) mod p — i.e. 0 if a == 0, else p - a.
+extern "C" void Fr_rawNeg(FrRawElement r, const FrRawElement a) {
+    if (Fr_rawIsZero(a)) {
+        r[0] = r[1] = r[2] = r[3] = 0;
+        return;
+    }
+    // r = p - a as a 4-limb subtraction with borrow. a < p ensures no
+    // borrow out of the MSB.
+    int64_t borrow = 0;
+    for (int i = 0; i < Fr_N64; i++) {
+        __int128 diff = (__int128)Fr_rawq[i] - (__int128)a[i] - borrow;
+        if (diff < 0) {
+            r[i] = (uint64_t)(diff + ((__int128)1 << 64));
+            borrow = 1;
+        } else {
+            r[i] = (uint64_t)diff;
+            borrow = 0;
+        }
+    }
+}
+
+// ---- Stubs still pending (Tasks 18-21) -----------------------------------
+
 extern "C" void Fr_rawAdd(FrRawElement, const FrRawElement, const FrRawElement)                       { Fr_cios_stub("Fr_rawAdd"); }
 extern "C" void Fr_rawSub(FrRawElement, const FrRawElement, const FrRawElement)                       { Fr_cios_stub("Fr_rawSub"); }
-extern "C" void Fr_rawNeg(FrRawElement, const FrRawElement)                                           { Fr_cios_stub("Fr_rawNeg"); }
 extern "C" void Fr_rawMMul(FrRawElement, const FrRawElement, const FrRawElement)                      { Fr_cios_stub("Fr_rawMMul"); }
 extern "C" void Fr_rawMSquare(FrRawElement, const FrRawElement)                                       { Fr_cios_stub("Fr_rawMSquare"); }
 extern "C" void Fr_rawMMul1(FrRawElement, const FrRawElement, uint64_t)                               { Fr_cios_stub("Fr_rawMMul1"); }
 extern "C" void Fr_rawToMontgomery(FrRawElement, const FrRawElement&)                                 { Fr_cios_stub("Fr_rawToMontgomery"); }
 extern "C" void Fr_rawFromMontgomery(FrRawElement, const FrRawElement&)                               { Fr_cios_stub("Fr_rawFromMontgomery"); }
-extern "C" int  Fr_rawIsEq(const FrRawElement, const FrRawElement)                                    { Fr_cios_stub("Fr_rawIsEq"); }
-extern "C" int  Fr_rawIsZero(const FrRawElement)                                                      { Fr_cios_stub("Fr_rawIsZero"); }
 
 #endif // __USE_ASSEMBLY__
