@@ -67,13 +67,15 @@ inline void Poseidon2Goldilocks<SPONGE_WIDTH_T>::permute_neon(
     };
 
     // Fused (state + C)^7 element-wise, paired across two regs for ILP.
+    // C_ is a compile-time constant table with canonical values, so use
+    // gl_add_c (4 ops) instead of gl_add (7 ops) — saves 3 NEON ops per add.
     auto pow7add_neon = [](uint64x2_t st[HALF_W],
                             const Goldilocks::Element C_[SPONGE_WIDTH]) {
         for (uint32_t i = 0; i < HALF_W; i += 2) {
             uint64x2_t c0 = Goldilocks_neon::load(&C_[(i + 0) << 1]);
             uint64x2_t c1 = Goldilocks_neon::load(&C_[(i + 1) << 1]);
-            uint64x2_t a0 = Goldilocks_neon::gl_add(st[i + 0], c0);
-            uint64x2_t a1 = Goldilocks_neon::gl_add(st[i + 1], c1);
+            uint64x2_t a0 = Goldilocks_neon::gl_add_c(st[i + 0], c0);
+            uint64x2_t a1 = Goldilocks_neon::gl_add_c(st[i + 1], c1);
             // Inline pow7 with two independent chains so the two integer-mul
             // pipes on Apple Silicon stay busy each cycle.
             uint64x2_t pw2_0 = Goldilocks_neon::gl_square(a0);
@@ -122,11 +124,16 @@ inline void Poseidon2Goldilocks<SPONGE_WIDTH_T>::permute_neon(
         Poseidon2Goldilocks<SPONGE_WIDTH_T>::pow7(state0);          // partial-round S-box
         sum = sum + state0;                                         // include new state[0]
 
-        uint64x2_t scalar = Goldilocks_neon::splat(sum.fe);
+        // Pre-canonicalise sum once (one scalar cmp+sub) so we can use
+        // gl_add_c (4 ops) instead of gl_add (7 ops) inside the loop.
+        // Saves 3 NEON ops × HALF_W × N_PARTIAL_ROUNDS per hash.
+        uint64_t sum_canon = sum.fe;
+        if (sum_canon >= Goldilocks_neon::P) sum_canon -= Goldilocks_neon::P;
+        uint64x2_t scalar = Goldilocks_neon::splat(sum_canon);
         for (uint32_t i = 0; i < HALF_W; ++i) {
             uint64x2_t d = Goldilocks_neon::load(&D[i << 1]);
             st[i] = Goldilocks_neon::gl_mul(st[i], d);
-            st[i] = Goldilocks_neon::gl_add(st[i], scalar);
+            st[i] = Goldilocks_neon::gl_add_c(st[i], scalar);
         }
 
         // st[0] lane 0 now holds aux*D[0] + sum (wrong; the right value is
@@ -243,10 +250,11 @@ inline void Poseidon2Goldilocks<SPONGE_WIDTH_T>::permute_batch_neon(
     };
 
     // Fused (state + C)^7 element-wise across both sponges.
+    // C_ is canonical → use gl_add_c (4 ops, saves 3 vs gl_add).
     auto pow7add_batch = [](uint64x2_t* x, const Goldilocks::Element C_[W]) {
         for (uint32_t i = 0; i < W; ++i) {
             uint64x2_t c  = N::splat(C_[i].fe);
-            uint64x2_t s  = N::gl_add(x[i], c);
+            uint64x2_t s  = N::gl_add_c(x[i], c);
             uint64x2_t s2 = N::gl_square(s);
             uint64x2_t s4 = N::gl_square(s2);
             uint64x2_t s3 = N::gl_mul(s, s2);
@@ -283,8 +291,9 @@ inline void Poseidon2Goldilocks<SPONGE_WIDTH_T>::permute_batch_neon(
         d[i] = N::splat(D[i].fe);
 
     for (uint32_t r = 0; r < N_PARTIAL_ROUNDS; ++r) {
+        // c is canonical (compile-time table) → gl_add_c (4 ops).
         uint64x2_t c = N::splat(C[HALF_N_FULL_ROUNDS * W + r].fe);
-        st[0] = N::gl_add(st[0], c);
+        st[0] = N::gl_add_c(st[0], c);
         element_pow7_batch(st[0]);
         uint64x2_t sum = N::splat(0);
         for (uint32_t i = 0; i < W; ++i)

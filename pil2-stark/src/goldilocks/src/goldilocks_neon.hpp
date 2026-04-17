@@ -177,6 +177,27 @@ inline uint64x2_t gl_square(uint64x2_t a) {
     return gl_mul(a, a);
 }
 
+// Specialised add for when ONE operand is known canonical (< p). The other
+// operand may be non-canonical in [0, 2^64). Skips the pre-canonicalise of
+// `a` that the general gl_add needs to keep itself to a single overflow
+// correction. 4 NEON ops vs 7 — saves 3 ops per call.
+//
+// Correctness: a < 2^64, b_canon < p ≈ 2^64. a + b_canon < 2^64 + p < 2^65,
+// so at most one wrap. On wrap, r = a + b_canon - 2^64, and r < a < 2^64,
+// with r strictly less than p (since the wrapped excess is bounded by b_canon
+// < p). r -= p (equivalent to r += EPS) stays in [0, 2^64) — no second wrap.
+// Output is non-canonical [0, 2^64), matching gl_mul's contract.
+//
+// Use at call sites where one operand is a compile-time constant or otherwise
+// known canonical (e.g. Poseidon2 round constants C[], scalar broadcasts of
+// a pre-reduced value).
+inline uint64x2_t gl_add_c(uint64x2_t a, uint64x2_t b_canon) {
+    const uint64x2_t p_vec = vdupq_n_u64(P);
+    uint64x2_t r = vaddq_u64(a, b_canon);
+    uint64x2_t overflow = vcgtq_u64(a, r);   // r < a iff carry-out
+    return vsubq_u64(r, vandq_u64(overflow, p_vec));
+}
+
 // Modular add, fully vectorised. Bit-exact with scalar Goldilocks::add:
 //   1. Canonicalise a: if (a >= p) a -= p
 //   2. r = a + b
