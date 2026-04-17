@@ -49,14 +49,23 @@ inline void Poseidon2Goldilocks<SPONGE_WIDTH_T>::permute_neon(
     constexpr uint32_t HALF_W = SPONGE_WIDTH >> 1;
 
     // matmul_external punts to the scalar implementation: NEON-store,
-    // scalar-call, NEON-load. Tried a full NEON M4 + cross-chunk-sum
-    // vectorisation; the lane-shuffle overhead (vextq / vzip) made W=12 / W=16
-    // ~14% slower vs the punt. Apple Silicon has 8 integer ALUs vs 4 NEON
+    // scalar-call, NEON-load. Apple Silicon has 8 integer ALUs vs 4 NEON
     // ALUs, so scalar add chains have more parallel headroom than NEON gl_add
-    // chains for this kind of cross-element add-heavy code. Revisit if a
-    // chunked layout (lane 0 = chunk0 elem k, lane 1 = chunk1 elem k) is
-    // adopted across the whole permute — that would let M4 run truly in
-    // parallel across chunks without shuffles.
+    // chains for this cross-element add-heavy code.
+    //
+    // Two NEON vectorisations were tried and BOTH lost vs the punt:
+    //  (1) lane-shuffle M4 (vextq / vzip inside the M4 body): ~14% slower
+    //      at W=12 / W=16 — shuffle overhead dominates.
+    //  (2) chunked layout (transpose in via vzipq, M4 with element-wise
+    //      NEON across 2 chunks per reg, no shuffles inside M4, transpose
+    //      out): W=16 NEON at 260ms vs scalar 230ms (~13% slower). Each
+    //      gl_add is 7 NEON ops vs ~3 scalar ops — 2x parallelism across
+    //      chunks doesn't recover the 2.3x per-op cost ratio. Verified by
+    //      benchmark on M4 Pro, 2026-04-17.
+    //
+    // Bottom line: matmul_external is fundamentally faster in scalar on
+    // Apple Silicon. Do not retry without a new primitive (e.g. wider lane
+    // count like SVE, or a reduction that amortises across many adds).
     auto matmul_external_neon = [](uint64x2_t st[HALF_W]) {
         Goldilocks::Element scratch[SPONGE_WIDTH];
         for (uint32_t i = 0; i < HALF_W; ++i)
