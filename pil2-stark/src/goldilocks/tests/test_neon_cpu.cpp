@@ -165,4 +165,136 @@ TEST(Poseidon2Neon_W8, compress_neon_matches_COMPRESS_W8_GOLDEN) {
     }
 }
 
+// W=12 — production merkletree hot path (arity 3).
+TEST(Poseidon2Neon_W12, permute_neon_matches_PERMUTE_W12_GOLDEN) {
+    Goldilocks::Element input[12];
+    for (int i = 0; i < 12; ++i) input[i].fe = i;
+    Goldilocks::Element out[12];
+    Poseidon2Goldilocks<12>::permute(out, input, Poseidon2Mode::Neon);
+    for (int i = 0; i < 12; ++i) {
+        EXPECT_EQ(out[i].fe, GoldilocksTestData::PERMUTE_W12_GOLDEN[i])
+            << "element " << i;
+    }
+}
+
+TEST(Poseidon2Neon_W12, compress_neon_matches_COMPRESS_W12_GOLDEN) {
+    Goldilocks::Element input[12];
+    for (int i = 0; i < 12; ++i) input[i].fe = i;
+    Goldilocks::Element state[Poseidon2Goldilocks<12>::CAPACITY];
+    Poseidon2Goldilocks<12>::compress(state, input, Poseidon2Mode::Neon);
+    for (int i = 0; i < (int)Poseidon2Goldilocks<12>::CAPACITY; ++i) {
+        EXPECT_EQ(state[i].fe, GoldilocksTestData::COMPRESS_W12_GOLDEN[i])
+            << "element " << i;
+    }
+}
+
+TEST(Poseidon2Neon_W12, permute_neon_matches_permute_seq_random) {
+    auto rng = make_rng(0x12121212'34343434ULL);
+    for (int iter = 0; iter < 32; ++iter) {
+        Goldilocks::Element input[12];
+        for (int i = 0; i < 12; ++i) input[i].fe = random_field(rng);
+        Goldilocks::Element out_seq[12], out_neon[12];
+        Poseidon2Goldilocks<12>::permute(out_seq,  input, Poseidon2Mode::Scalar);
+        Poseidon2Goldilocks<12>::permute(out_neon, input, Poseidon2Mode::Neon);
+        for (int i = 0; i < 12; ++i)
+            EXPECT_EQ(out_neon[i].fe, out_seq[i].fe)
+                << "iter " << iter << " element " << i;
+    }
+}
+
+// W=16 — arity-4 merkletree path.
+TEST(Poseidon2Neon_W16, permute_neon_matches_PERMUTE_W16_GOLDEN) {
+    Goldilocks::Element input[16];
+    for (int i = 0; i < 16; ++i) input[i].fe = i;
+    Goldilocks::Element out[16];
+    Poseidon2Goldilocks<16>::permute(out, input, Poseidon2Mode::Neon);
+    for (int i = 0; i < 16; ++i) {
+        EXPECT_EQ(out[i].fe, GoldilocksTestData::PERMUTE_W16_GOLDEN[i])
+            << "element " << i;
+    }
+}
+
+TEST(Poseidon2Neon_W16, compress_neon_matches_COMPRESS_W16_GOLDEN) {
+    Goldilocks::Element input[16];
+    for (int i = 0; i < 16; ++i) input[i].fe = i;
+    Goldilocks::Element state[Poseidon2Goldilocks<16>::CAPACITY];
+    Poseidon2Goldilocks<16>::compress(state, input, Poseidon2Mode::Neon);
+    for (int i = 0; i < (int)Poseidon2Goldilocks<16>::CAPACITY; ++i) {
+        EXPECT_EQ(state[i].fe, GoldilocksTestData::COMPRESS_W16_GOLDEN[i])
+            << "element " << i;
+    }
+}
+
+TEST(Poseidon2Neon_W16, permute_neon_matches_permute_seq_random) {
+    auto rng = make_rng(0x16161616'78787878ULL);
+    for (int iter = 0; iter < 32; ++iter) {
+        Goldilocks::Element input[16];
+        for (int i = 0; i < 16; ++i) input[i].fe = random_field(rng);
+        Goldilocks::Element out_seq[16], out_neon[16];
+        Poseidon2Goldilocks<16>::permute(out_seq,  input, Poseidon2Mode::Scalar);
+        Poseidon2Goldilocks<16>::permute(out_neon, input, Poseidon2Mode::Neon);
+        for (int i = 0; i < 16; ++i)
+            EXPECT_EQ(out_neon[i].fe, out_seq[i].fe)
+                << "iter " << iter << " element " << i;
+    }
+}
+
+// Merkletree mode-equivalence: Scalar vs Neon produce the same tree for a
+// range of (num_rows, num_cols, arity) shapes. This is the full-chain gate
+// — linear_hash_neon inside, compress_neon for internal nodes.
+namespace {
+
+template <uint32_t W>
+void check_merkletree_mode_equivalence(uint64_t num_cols, uint64_t num_rows, uint64_t arity,
+                                       uint64_t seed) {
+    auto rng = make_rng(seed);
+    std::vector<Goldilocks::Element> input(num_rows * num_cols);
+    for (auto& e : input) e.fe = random_field(rng);
+
+    // Tree size: sum of per-level rounded counts × CAPACITY, built the same way
+    // as merkletree_seq / merkletree_neon expect.
+    auto tree_size = [&]() {
+        uint64_t total = num_rows;
+        uint64_t pending = num_rows;
+        while (pending > 1) {
+            uint64_t extra = (arity - (pending % arity)) % arity;
+            total += extra;
+            uint64_t next = (pending + arity - 1) / arity;
+            total += next;
+            pending = next;
+        }
+        return total;
+    };
+    const uint64_t tsize = tree_size();
+    std::vector<Goldilocks::Element> tree_seq (tsize * Poseidon2Goldilocks<W>::CAPACITY, Goldilocks::Element{0});
+    std::vector<Goldilocks::Element> tree_neon(tsize * Poseidon2Goldilocks<W>::CAPACITY, Goldilocks::Element{0});
+
+    Poseidon2Goldilocks<W>::merkletree(tree_seq.data(),  input.data(), num_cols, num_rows, arity, 0, 1, Poseidon2Mode::Scalar);
+    Poseidon2Goldilocks<W>::merkletree(tree_neon.data(), input.data(), num_cols, num_rows, arity, 0, 1, Poseidon2Mode::Neon);
+
+    for (size_t i = 0; i < tree_seq.size(); ++i) {
+        EXPECT_EQ(tree_seq[i].fe, tree_neon[i].fe)
+            << "W=" << W << " rows=" << num_rows << " cols=" << num_cols
+            << " arity=" << arity << " tree[" << i << "]";
+        if (tree_seq[i].fe != tree_neon[i].fe) return;  // stop after first diff
+    }
+}
+
+}  // namespace
+
+TEST(Poseidon2Neon_merkletree, W8_arity2) {
+    check_merkletree_mode_equivalence<8>(/*ncols=*/24, /*nrows=*/64,  /*arity=*/2, 0xaa);
+    check_merkletree_mode_equivalence<8>(/*ncols=*/36, /*nrows=*/128, /*arity=*/2, 0xbb);
+}
+
+TEST(Poseidon2Neon_merkletree, W12_arity3) {
+    check_merkletree_mode_equivalence<12>(24, 81,  3, 0xcc);
+    check_merkletree_mode_equivalence<12>(36, 243, 3, 0xdd);
+}
+
+TEST(Poseidon2Neon_merkletree, W16_arity4) {
+    check_merkletree_mode_equivalence<16>(24, 64,  4, 0xee);
+    check_merkletree_mode_equivalence<16>(36, 256, 4, 0xff);
+}
+
 #endif  // PIL2_HAS_NEON

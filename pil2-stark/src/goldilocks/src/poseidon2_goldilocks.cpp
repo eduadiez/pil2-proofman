@@ -700,8 +700,98 @@ void Poseidon2Goldilocks<SPONGE_WIDTH_T>::merkletree_batch_avx512(Goldilocks::El
 
 #endif
 
+// ===========================================================================
+// NEON single-sponge linear_hash + merkletree (Part 5)
+// Mirror linear_hash_seq / merkletree_seq exactly, but call permute_neon /
+// compress_neon inside so the hot path actually uses the NEON code on Darwin.
+// Batched (4-row) variant lands in Tasks 36-37 as a follow-up.
+// ===========================================================================
+
+#if PIL2_HAS_NEON
+template<uint32_t SPONGE_WIDTH_T>
+void Poseidon2Goldilocks<SPONGE_WIDTH_T>::linear_hash_neon(Goldilocks::Element *output, Goldilocks::Element *input, uint64_t size)
+{
+    uint64_t remaining = size;
+    Goldilocks::Element state[SPONGE_WIDTH];
+
+    while (remaining)
+    {
+        if (remaining == size)
+        {
+            memset(state + RATE, 0, CAPACITY * sizeof(Goldilocks::Element));
+        }
+        else
+        {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wrestrict"
+            std::memcpy(state + RATE, state, CAPACITY * sizeof(Goldilocks::Element));
+#pragma GCC diagnostic pop
+        }
+
+        uint64_t n = (remaining < RATE) ? remaining : RATE;
+        memset(&state[n], 0, (RATE - n) * sizeof(Goldilocks::Element));
+        std::memcpy(state, input + (size - remaining), n * sizeof(Goldilocks::Element));
+        permute_neon(state, state);
+        remaining -= n;
+    }
+    if (size > 0)
+    {
+        std::memcpy(output, state, CAPACITY * sizeof(Goldilocks::Element));
+    }
+    else
+    {
+        memset(output, 0, CAPACITY * sizeof(Goldilocks::Element));
+    }
+}
+
+template<uint32_t SPONGE_WIDTH_T>
+void Poseidon2Goldilocks<SPONGE_WIDTH_T>::merkletree_neon(Goldilocks::Element *tree, Goldilocks::Element *input, uint64_t num_cols, uint64_t num_rows, uint64_t arity, int nThreads, uint64_t dim)
+{
+    if (num_rows == 0)
+    {
+        return;
+    }
+
+    Goldilocks::Element *cursor = tree;
+    if (nThreads == 0)
+        nThreads = omp_get_max_threads();
+
+#pragma omp parallel for num_threads(nThreads)
+    for (uint64_t i = 0; i < num_rows; i++)
+    {
+        linear_hash_neon(&cursor[i * CAPACITY], &input[i * num_cols * dim], num_cols * dim);
+    }
+
+    uint64_t pending = num_rows;
+    uint64_t nextN = (pending + (arity - 1)) / arity;
+    uint64_t nextIndex = 0;
+
+    while (pending > 1)
+    {
+        uint64_t extraZeros = (arity - (pending % arity)) % arity;
+        if (extraZeros > 0)
+        {
+            std::memset(&cursor[nextIndex + pending * CAPACITY], 0, extraZeros * CAPACITY * sizeof(Goldilocks::Element));
+        }
+
+#pragma omp parallel for num_threads(nThreads)
+        for (uint64_t i = 0; i < nextN; i++)
+        {
+            Goldilocks::Element pol_input[SPONGE_WIDTH];
+            memset(pol_input, 0, SPONGE_WIDTH * sizeof(Goldilocks::Element));
+            std::memcpy(pol_input, &cursor[nextIndex + i * SPONGE_WIDTH], SPONGE_WIDTH * sizeof(Goldilocks::Element));
+            compress_neon((Goldilocks::Element(&)[CAPACITY])cursor[nextIndex + (pending + extraZeros + i) * CAPACITY], pol_input);
+        }
+
+        nextIndex += (pending + extraZeros) * CAPACITY;
+        pending = (pending + (arity - 1)) / arity;
+        nextN = (pending + (arity - 1)) / arity;
+    }
+}
+#endif  // PIL2_HAS_NEON
+
 // Explicit template instantiations
 template class Poseidon2Goldilocks<4>;
 template class Poseidon2Goldilocks<8>;
-template class Poseidon2Goldilocks<12>;  
+template class Poseidon2Goldilocks<12>;
 template class Poseidon2Goldilocks<16>;

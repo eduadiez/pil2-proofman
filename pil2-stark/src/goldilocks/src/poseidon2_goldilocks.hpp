@@ -153,6 +153,10 @@ private:
     static void permute_neon(Goldilocks::Element *, const Goldilocks::Element *);
     static void compress_neon(Goldilocks::Element (&state)[CAPACITY],
                           const Goldilocks::Element (&input)[SPONGE_WIDTH]);
+    static void linear_hash_neon(Goldilocks::Element *output, Goldilocks::Element *input, uint64_t size);
+    static void merkletree_neon(Goldilocks::Element *tree, Goldilocks::Element *input,
+                                uint64_t num_cols, uint64_t num_rows, uint64_t arity,
+                                int nThreads = 0, uint64_t dim = 1);
 #endif
 
 };
@@ -338,6 +342,8 @@ inline void Poseidon2Goldilocks<W>::linearHash(
     if (mode == Poseidon2Mode::Auto) {
 #if PIL2_HAS_AVX2
         mode = Poseidon2Mode::Avx;
+#elif PIL2_HAS_NEON
+        mode = Poseidon2Mode::Neon;
 #else
         mode = Poseidon2Mode::Scalar;
 #endif
@@ -346,6 +352,9 @@ inline void Poseidon2Goldilocks<W>::linearHash(
         case Poseidon2Mode::Scalar: linear_hash_seq(output, input, size); return;
 #if PIL2_HAS_AVX2
         case Poseidon2Mode::Avx:    linear_hash_avx(output, input, size); return;
+#endif
+#if PIL2_HAS_NEON
+        case Poseidon2Mode::Neon:   linear_hash_neon(output, input, size); return;
 #endif
         // AvxBatch / Avx512Batch have a 4/8-row contract and are not callable
         // as single-row linearHash — they remain private, reachable only via
@@ -366,6 +375,8 @@ inline void Poseidon2Goldilocks<W>::merkletree(
         mode = Poseidon2Mode::Avx512Batch;
 #elif PIL2_HAS_AVX2
         mode = Poseidon2Mode::AvxBatch;
+#elif PIL2_HAS_NEON
+        mode = Poseidon2Mode::Neon;  // single-sponge NEON; batched variant pending (Tasks 36-37)
 #else
         mode = Poseidon2Mode::Scalar;
 #endif
@@ -382,6 +393,10 @@ inline void Poseidon2Goldilocks<W>::merkletree(
 #if PIL2_HAS_AVX512
         case Poseidon2Mode::Avx512Batch:
             merkletree_batch_avx512(tree, input, num_cols, num_rows, arity, nThreads, dim); return;
+#endif
+#if PIL2_HAS_NEON
+        case Poseidon2Mode::Neon:
+            merkletree_neon(tree, input, num_cols, num_rows, arity, nThreads, dim); return;
 #endif
         // Avx512 single-sponge is intentionally unimplemented (see enum comment).
         default: break;
