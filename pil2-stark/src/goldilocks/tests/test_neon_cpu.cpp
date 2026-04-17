@@ -334,4 +334,59 @@ TEST(Poseidon2Neon_merkletree, W16_arity4) {
     check_merkletree_mode_equivalence<16>(36, 256, 4, 0xff);
 }
 
+// Batch (Mode::NeonBatch): tree built via NeonBatch must equal scalar tree.
+namespace {
+template <uint32_t W>
+void check_merkletree_batch_mode_equivalence(uint64_t num_cols, uint64_t num_rows,
+                                             uint64_t arity, uint64_t seed) {
+    auto rng = make_rng(seed);
+    std::vector<Goldilocks::Element> input(num_rows * num_cols);
+    for (auto& e : input) e.fe = random_field(rng);
+
+    auto tree_size = [&]() {
+        uint64_t total = num_rows;
+        uint64_t pending = num_rows;
+        while (pending > 1) {
+            uint64_t extra = (arity - (pending % arity)) % arity;
+            total += extra;
+            uint64_t next = (pending + arity - 1) / arity;
+            total += next;
+            pending = next;
+        }
+        return total;
+    };
+    const uint64_t tsize = tree_size();
+    std::vector<Goldilocks::Element> tree_seq  (tsize * Poseidon2Goldilocks<W>::CAPACITY, Goldilocks::Element{0});
+    std::vector<Goldilocks::Element> tree_batch(tsize * Poseidon2Goldilocks<W>::CAPACITY, Goldilocks::Element{0});
+
+    Poseidon2Goldilocks<W>::merkletree(tree_seq.data(),   input.data(), num_cols, num_rows, arity, 0, 1, Poseidon2Mode::Scalar);
+    Poseidon2Goldilocks<W>::merkletree(tree_batch.data(), input.data(), num_cols, num_rows, arity, 0, 1, Poseidon2Mode::NeonBatch);
+
+    for (size_t i = 0; i < tree_seq.size(); ++i) {
+        EXPECT_EQ(tree_seq[i].fe, tree_batch[i].fe)
+            << "W=" << W << " rows=" << num_rows << " cols=" << num_cols
+            << " arity=" << arity << " tree[" << i << "]";
+        if (tree_seq[i].fe != tree_batch[i].fe) return;
+    }
+}
+}  // namespace
+
+TEST(Poseidon2NeonBatch_merkletree, W8_arity2) {
+    // Even and odd row counts (odd exercises the scalar tail in
+    // merkletree_batch_neon's `num_rows - i < 2` branch).
+    check_merkletree_batch_mode_equivalence<8>(/*ncols=*/24, /*nrows=*/64,  /*arity=*/2, 0xa1);
+    check_merkletree_batch_mode_equivalence<8>(/*ncols=*/36, /*nrows=*/65,  /*arity=*/2, 0xa2);
+    check_merkletree_batch_mode_equivalence<8>(/*ncols=*/24, /*nrows=*/128, /*arity=*/2, 0xa3);
+}
+
+TEST(Poseidon2NeonBatch_merkletree, W12_arity3) {
+    check_merkletree_batch_mode_equivalence<12>(24, 81, 3, 0xb1);
+    check_merkletree_batch_mode_equivalence<12>(36, 243, 3, 0xb2);
+}
+
+TEST(Poseidon2NeonBatch_merkletree, W16_arity4) {
+    check_merkletree_batch_mode_equivalence<16>(24, 64,  4, 0xc1);
+    check_merkletree_batch_mode_equivalence<16>(36, 256, 4, 0xc2);
+}
+
 #endif  // PIL2_HAS_NEON

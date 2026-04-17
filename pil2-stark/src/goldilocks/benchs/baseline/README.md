@@ -12,6 +12,7 @@ Two reference files in this directory:
 | `apple-silicon-m4pro-neon-vectorized-add.txt` | macOS arm64, M4 Pro 14-core | Part 5 Task 38d — gl_add/gl_sub vectorised; matmul_external still punts | CPU: Scalar + NEON W=8/12/16 |
 | `apple-silicon-m4pro-neon-ntt.txt` | macOS arm64, M4 Pro 14-core | Part 5 Task 43 — NTT/INTT inner butterfly NEON-vectorised | CPU: Scalar (auto picks NEON inside butterfly) + NEON Poseidon2 W=8 |
 | `apple-silicon-m4pro-neon-w4w8.txt` | macOS arm64, M4 Pro 14-core | Part 5 Task 40 — W=4 NEON also wired via Auto | CPU: full Phase B state (NEON Poseidon2 W=4+W=8 + NEON NTT) |
+| `apple-silicon-m4pro-neon-batch.txt` | macOS arm64, M4 Pro 14-core | Part 5 Task 36-37 — 2-sponge NeonBatch impls + benches added (Auto NOT routed) | CPU: Scalar (auto) + Neon + NeonBatch merkletree variants exposed |
 
 The two files **cannot be row-compared by name** because PR #465 (`refactor:
 reorganize tests/benchmarks into per-area files`) renamed every benchmark
@@ -179,6 +180,38 @@ by scalar matmul overhead.
 
 Auto resolution on Darwin now picks NEON for both W=4 AND W=8.
 W=12 / W=16 still fall back to Scalar pending matmul vectorisation.
+
+---
+
+## 3.5c. Merkletree Scalar vs Neon vs NeonBatch (Task 36-37, /24 cols)
+
+| Bench | Scalar | Neon (single) | NeonBatch (2-sponge) | Best NEON delta |
+|---|---|---|---|---|
+| `MERKLETREE_W8_AR2`   | 4985 ms | 4937 ms (−1%) | 4792 ms (**−4%**) | NeonBatch wins narrowly |
+| `MERKLETREE_W12_AR3`  | 3349 ms | 3588 ms (+7%) | 3291 ms (**−2%**) | NeonBatch wins narrowly |
+| `MERKLETREE_W16_AR4`  | 2728 ms | 3143 ms (+15%) | 3022 ms (+11%) | scalar still wins |
+
+**Honest read:** The 2-sponge NeonBatch impl is a real correctness deliverable
+(3 mode-equivalence tests pass for W=8/W=12/W=16 across realistic shapes),
+and it consistently beats single-sponge Neon at W=12/W=16. But at the
+merkletree level the win over Scalar is marginal-to-negative — Apple
+Silicon's scalar pipeline already extracts most of the parallelism via
+clang's auto-vectorisation, and NEON's strided gather load (we use
+`vsetq_lane_u64` to pull element_k from each of 2 back-to-back sponges)
+adds overhead that the 2-lane parallelism can't quite cover.
+
+For now `merkletree(Auto)` on Darwin stays on Scalar. NeonBatch is
+available via explicit `Mode::NeonBatch` for future experimentation:
+
+- **Interleaved layout** could remove the strided-load overhead by storing
+  state as `{sp0.x0, sp1.x0, sp0.x1, sp1.x1, ...}`, allowing single
+  `vld1q_u64` loads.
+- **4-row batch via 2 NEON regs per element** would mirror AVX2's 4-sponge
+  contract (more parallelism, more register pressure).
+- **Profiling** to identify whether the bottleneck is the strided load,
+  the gl_mul/gl_add throughput, or thread synchronisation in the OMP loop.
+
+These are queued as follow-ups, not blockers.
 
 ---
 

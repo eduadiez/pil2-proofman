@@ -265,6 +265,40 @@ static void MERKLETREE_W_AR_AVXBATCH_CPU_BENCH(benchmark::State &state)
 }
 #endif
 
+#if PIL2_HAS_NEON
+template<uint32_t W, uint32_t ARITY>
+static void MERKLETREE_W_AR_NEON_CPU_BENCH(benchmark::State &state)
+{
+    uint64_t nCols = state.range(0);
+    Goldilocks::Element *cols = new Goldilocks::Element[nCols * BENCH_NROWS];
+    fillData(cols, nCols * BENCH_NROWS);
+
+    uint64_t numElems = getTreeNumElements(BENCH_NROWS, ARITY);
+    Goldilocks::Element *tree = new Goldilocks::Element[numElems];
+
+    for (auto _ : state)
+        Poseidon2Goldilocks<W>::merkletree(tree, cols, nCols, BENCH_NROWS, ARITY, /*nThreads=*/0, /*dim=*/1, Poseidon2Mode::Neon);
+
+    delete[] cols; delete[] tree;
+}
+
+template<uint32_t W, uint32_t ARITY>
+static void MERKLETREE_W_AR_NEONBATCH_CPU_BENCH(benchmark::State &state)
+{
+    uint64_t nCols = state.range(0);
+    Goldilocks::Element *cols = new Goldilocks::Element[nCols * BENCH_NROWS];
+    fillData(cols, nCols * BENCH_NROWS);
+
+    uint64_t numElems = getTreeNumElements(BENCH_NROWS, ARITY);
+    Goldilocks::Element *tree = new Goldilocks::Element[numElems];
+
+    for (auto _ : state)
+        Poseidon2Goldilocks<W>::merkletree(tree, cols, nCols, BENCH_NROWS, ARITY, /*nThreads=*/0, /*dim=*/1, Poseidon2Mode::NeonBatch);
+
+    delete[] cols; delete[] tree;
+}
+#endif
+
 #ifdef __AVX512__
 template<uint32_t W, uint32_t ARITY>
 static void MERKLETREE_W_AR_AVX512BATCH_CPU_BENCH(benchmark::State &state)
@@ -404,6 +438,15 @@ REG_NCOLS_AR(MERKLETREE_W_AR_AVX_CPU_BENCH, 16, 4, "MERKLETREE_W16_AR4_AVX_CPU_B
 REG_NCOLS_AR(MERKLETREE_W_AR_AVXBATCH_CPU_BENCH, 8,  2, "MERKLETREE_W8_AR2_AVXBATCH_CPU_BENCH")
 REG_NCOLS_AR(MERKLETREE_W_AR_AVXBATCH_CPU_BENCH, 12, 3, "MERKLETREE_W12_AR3_AVXBATCH_CPU_BENCH")
 REG_NCOLS_AR(MERKLETREE_W_AR_AVXBATCH_CPU_BENCH, 16, 4, "MERKLETREE_W16_AR4_AVXBATCH_CPU_BENCH")
+#endif
+
+#if PIL2_HAS_NEON
+REG_NCOLS_AR(MERKLETREE_W_AR_NEON_CPU_BENCH,       8,  2, "MERKLETREE_W8_AR2_NEON_CPU_BENCH")
+REG_NCOLS_AR(MERKLETREE_W_AR_NEON_CPU_BENCH,      12,  3, "MERKLETREE_W12_AR3_NEON_CPU_BENCH")
+REG_NCOLS_AR(MERKLETREE_W_AR_NEON_CPU_BENCH,      16,  4, "MERKLETREE_W16_AR4_NEON_CPU_BENCH")
+REG_NCOLS_AR(MERKLETREE_W_AR_NEONBATCH_CPU_BENCH,  8,  2, "MERKLETREE_W8_AR2_NEONBATCH_CPU_BENCH")
+REG_NCOLS_AR(MERKLETREE_W_AR_NEONBATCH_CPU_BENCH, 12,  3, "MERKLETREE_W12_AR3_NEONBATCH_CPU_BENCH")
+REG_NCOLS_AR(MERKLETREE_W_AR_NEONBATCH_CPU_BENCH, 16,  4, "MERKLETREE_W16_AR4_NEONBATCH_CPU_BENCH")
 #endif
 
 #ifdef __AVX512__

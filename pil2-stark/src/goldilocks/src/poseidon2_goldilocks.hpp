@@ -157,6 +157,16 @@ private:
     static void merkletree_neon(Goldilocks::Element *tree, Goldilocks::Element *input,
                                 uint64_t num_cols, uint64_t num_rows, uint64_t arity,
                                 int nThreads = 0, uint64_t dim = 1);
+    // NEON 2-sponge batch (Part 5 Task 36). Each uint64x2_t holds the same
+    // element index from 2 sponges. Mirrors AvxBatch (4-sponge) shape but
+    // with NEON's 2-lane width. Bodies in poseidon2_goldilocks_neon.hpp.
+    static void permute_batch_neon(Goldilocks::Element *, const Goldilocks::Element *);
+    static void compress_batch_neon(Goldilocks::Element (&state)[2 * CAPACITY],
+                                const Goldilocks::Element (&input)[2 * SPONGE_WIDTH]);
+    static void linear_hash_batch_neon(Goldilocks::Element *output, Goldilocks::Element *input, uint64_t size);
+    static void merkletree_batch_neon(Goldilocks::Element *tree, Goldilocks::Element *input,
+                                      uint64_t num_cols, uint64_t num_rows, uint64_t arity,
+                                      int nThreads = 0, uint64_t dim = 1);
 #endif
 
 };
@@ -384,10 +394,15 @@ inline void Poseidon2Goldilocks<W>::merkletree(
 #elif PIL2_HAS_AVX2
         mode = Poseidon2Mode::AvxBatch;
 #elif PIL2_HAS_NEON
-        // See permute() Auto comment — restrict to W=8. Production merkletree
-        // hot path is W=12 / W=16, which falls back to Scalar here until
-        // matmul_external_neon is properly vectorised.
-        mode = (W == 4 || W == 8) ? Poseidon2Mode::Neon : Poseidon2Mode::Scalar;
+        // NeonBatch is correctness-gated for all widths but is a 5-16% perf
+        // regression vs Scalar on M4 Pro at the merkletree level. Strided
+        // gather loads + clang's auto-vectorisation of the scalar path leave
+        // NEON's 2-lane parallelism unable to compensate. Keep batch impls
+        // available via explicit Mode::NeonBatch (tests verify), but Auto
+        // stays on the path that actually wins. Single-sponge Mode::Neon is
+        // also a regression at W=12/W=16 (W=8 wins go via permute/compress
+        // Auto, not merkletree). So merkletree Auto on Darwin = Scalar.
+        mode = Poseidon2Mode::Scalar;
 #else
         mode = Poseidon2Mode::Scalar;
 #endif
@@ -408,6 +423,8 @@ inline void Poseidon2Goldilocks<W>::merkletree(
 #if PIL2_HAS_NEON
         case Poseidon2Mode::Neon:
             merkletree_neon(tree, input, num_cols, num_rows, arity, nThreads, dim); return;
+        case Poseidon2Mode::NeonBatch:
+            merkletree_batch_neon(tree, input, num_cols, num_rows, arity, nThreads, dim); return;
 #endif
         // Avx512 single-sponge is intentionally unimplemented (see enum comment).
         default: break;
