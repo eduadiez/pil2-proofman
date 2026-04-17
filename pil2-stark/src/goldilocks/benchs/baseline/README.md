@@ -6,6 +6,7 @@ Two reference files in this directory:
 |---|---|---|---|
 | `zisk1.txt` | Linux x86_64, 32-core 5.7GHz | Before PR #465's bench reorg | Scalar + AVX + AVX-512 (multi-variant) |
 | `apple-silicon-m4pro-scalar.txt` | macOS arm64, M4 Pro 14-core | After PR #465 bench reorg, before any NEON code lands | Scalar only (no AVX on Darwin, NEON not yet wired) |
+| `apple-silicon-m4pro-neon-w8.txt` | macOS arm64, M4 Pro 14-core | Part 5 Task 35 — NEON W=8 wired (naive per-lane gl_mul) | Scalar + NEON W=8 |
 
 The two files **cannot be row-compared by name** because PR #465 (`refactor:
 reorganize tests/benchmarks into per-area files`) renamed every benchmark
@@ -97,6 +98,27 @@ The M4 Pro is a higher-IPC core, but the per-iteration micro-bench loops
 appear to be limited by memory bandwidth or branch prediction in ways that
 favor x86's deeper pipelines and x86 build's `__USE_ASSEMBLY__` codepath
 (which uses `__asm__` add-no-double-carry; Darwin path is the C fallback).
+
+---
+
+## 3.5. W=8 NEON vs scalar (first-pass impl)
+
+| Bench | Scalar | NEON (Task 35) | Δ |
+|---|---|---|---|
+| `PERMUTE_W8`  | 173 ms | 170 ms | −1.7% (parity) |
+| `COMPRESS_W8` | 175 ms | 175 ms |  0%   (parity) |
+
+**Honest read:** the first-pass NEON port is at parity with scalar, not faster.
+The reason: `Goldilocks_neon::gl_mul` does per-lane scalar `__uint128_t`
+inside a NEON wrapper — the wrap/unwrap overhead exactly cancels the
+saved instruction on add. NEON only beats scalar when the inner mul is
+ALSO vectorised (e.g. via `vmull_u32` for the 32×32→64 pieces of the
+Goldilocks reduction). That optimisation is queued as Task 35.5; for now
+the bit-exactness gate is what matters and parity is acceptable.
+
+A 19% regression seen in an early short-iteration capture turned out to
+be measurement noise — running with `--benchmark_min_time=1.0s` and
+8+ iterations stabilises at parity.
 
 ---
 

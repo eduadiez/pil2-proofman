@@ -82,6 +82,28 @@ static void PERMUTE_W_AVX_CPU_BENCH(benchmark::State &state)
 }
 #endif
 
+#if PIL2_HAS_NEON
+template<uint32_t W>
+static void PERMUTE_W_NEON_CPU_BENCH(benchmark::State &state)
+{
+    uint64_t total = (uint64_t)NUM_HASHES * Poseidon2Goldilocks<W>::SPONGE_WIDTH;
+    Goldilocks::Element *x = new Goldilocks::Element[total];
+    Goldilocks::Element *r = new Goldilocks::Element[total];
+    fillData(x, total);
+
+    int nT = omp_get_max_threads();
+    for (auto _ : state) {
+#pragma omp parallel for num_threads(nT) schedule(static)
+        for (uint64_t i = 0; i < NUM_HASHES; i++)
+            Poseidon2Goldilocks<W>::permute(
+                &r[i * Poseidon2Goldilocks<W>::SPONGE_WIDTH],
+                &x[i * Poseidon2Goldilocks<W>::SPONGE_WIDTH],
+                Poseidon2Mode::Neon);
+    }
+    delete[] x; delete[] r;
+}
+#endif
+
 template<uint32_t W>
 static void COMPRESS_W_SCALAR_CPU_BENCH(benchmark::State &state)
 {
@@ -121,6 +143,29 @@ static void COMPRESS_W_AVX_CPU_BENCH(benchmark::State &state)
                 (Goldilocks::Element(&)[Poseidon2Goldilocks<W>::CAPACITY])r[i * Poseidon2Goldilocks<W>::CAPACITY],
                 (Goldilocks::Element(&)[Poseidon2Goldilocks<W>::SPONGE_WIDTH])x[i * Poseidon2Goldilocks<W>::SPONGE_WIDTH],
                 Poseidon2Mode::Avx);
+    }
+    delete[] x; delete[] r;
+}
+#endif
+
+#if PIL2_HAS_NEON
+template<uint32_t W>
+static void COMPRESS_W_NEON_CPU_BENCH(benchmark::State &state)
+{
+    uint64_t in_total  = (uint64_t)NUM_HASHES * Poseidon2Goldilocks<W>::SPONGE_WIDTH;
+    uint64_t out_total = (uint64_t)NUM_HASHES * Poseidon2Goldilocks<W>::CAPACITY;
+    Goldilocks::Element *x = new Goldilocks::Element[in_total];
+    Goldilocks::Element *r = new Goldilocks::Element[out_total];
+    fillData(x, in_total);
+
+    int nT = omp_get_max_threads();
+    for (auto _ : state) {
+#pragma omp parallel for num_threads(nT) schedule(static)
+        for (uint64_t i = 0; i < NUM_HASHES; i++)
+            Poseidon2Goldilocks<W>::compress(
+                (Goldilocks::Element(&)[Poseidon2Goldilocks<W>::CAPACITY])r[i * Poseidon2Goldilocks<W>::CAPACITY],
+                (Goldilocks::Element(&)[Poseidon2Goldilocks<W>::SPONGE_WIDTH])x[i * Poseidon2Goldilocks<W>::SPONGE_WIDTH],
+                Poseidon2Mode::Neon);
     }
     delete[] x; delete[] r;
 }
@@ -301,6 +346,10 @@ REG_ELEM(PERMUTE_W_AVX_CPU_BENCH, 12, "PERMUTE_W12_AVX_CPU_BENCH")
 REG_ELEM(PERMUTE_W_AVX_CPU_BENCH, 16, "PERMUTE_W16_AVX_CPU_BENCH")
 #endif
 
+#if PIL2_HAS_NEON
+REG_ELEM(PERMUTE_W_NEON_CPU_BENCH, 8, "PERMUTE_W8_NEON_CPU_BENCH")
+#endif
+
 REG_ELEM(COMPRESS_W_SCALAR_CPU_BENCH, 4,  "COMPRESS_W4_SCALAR_CPU_BENCH")
 REG_ELEM(COMPRESS_W_SCALAR_CPU_BENCH, 8,  "COMPRESS_W8_SCALAR_CPU_BENCH")
 REG_ELEM(COMPRESS_W_SCALAR_CPU_BENCH, 12, "COMPRESS_W12_SCALAR_CPU_BENCH")
@@ -311,6 +360,10 @@ REG_ELEM(COMPRESS_W_AVX_CPU_BENCH, 4,  "COMPRESS_W4_AVX_CPU_BENCH")
 REG_ELEM(COMPRESS_W_AVX_CPU_BENCH, 8,  "COMPRESS_W8_AVX_CPU_BENCH")
 REG_ELEM(COMPRESS_W_AVX_CPU_BENCH, 12, "COMPRESS_W12_AVX_CPU_BENCH")
 REG_ELEM(COMPRESS_W_AVX_CPU_BENCH, 16, "COMPRESS_W16_AVX_CPU_BENCH")
+#endif
+
+#if PIL2_HAS_NEON
+REG_ELEM(COMPRESS_W_NEON_CPU_BENCH, 8, "COMPRESS_W8_NEON_CPU_BENCH")
 #endif
 
 // ---------------------------------------------------------------------------

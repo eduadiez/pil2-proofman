@@ -140,4 +140,29 @@ TEST(Poseidon2Neon_W8, permute_neon_matches_permute_seq_zero_input) {
     }
 }
 
+// Gold-value gate: permute_neon against the published PERMUTE_W8_GOLDEN and
+// compress_neon against COMPRESS_W8_GOLDEN. Input: [0, 1, ..., W-1] (the
+// canonical input the gold values were captured against in test_helpers.hpp).
+TEST(Poseidon2Neon_W8, permute_neon_matches_PERMUTE_W8_GOLDEN) {
+    Goldilocks::Element input[8];
+    for (int i = 0; i < 8; ++i) input[i].fe = i;
+    Goldilocks::Element out[8];
+    Poseidon2Goldilocks<8>::permute(out, input, Poseidon2Mode::Neon);
+    for (int i = 0; i < 8; ++i) {
+        EXPECT_EQ(out[i].fe, GoldilocksTestData::PERMUTE_W8_GOLDEN[i])
+            << "element " << i;
+    }
+}
+
+TEST(Poseidon2Neon_W8, compress_neon_matches_COMPRESS_W8_GOLDEN) {
+    Goldilocks::Element input[8];
+    for (int i = 0; i < 8; ++i) input[i].fe = i;
+    Goldilocks::Element state[Poseidon2Goldilocks<8>::CAPACITY];
+    Poseidon2Goldilocks<8>::compress(state, input, Poseidon2Mode::Neon);
+    for (int i = 0; i < (int)Poseidon2Goldilocks<8>::CAPACITY; ++i) {
+        EXPECT_EQ(state[i].fe, GoldilocksTestData::COMPRESS_W8_GOLDEN[i])
+            << "element " << i;
+    }
+}
+
 #endif  // PIL2_HAS_NEON
