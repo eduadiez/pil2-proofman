@@ -284,6 +284,8 @@ inline void Poseidon2Goldilocks<W>::permute(
     if (mode == Poseidon2Mode::Auto) {
 #if PIL2_HAS_AVX2
         mode = Poseidon2Mode::Avx;
+#elif PIL2_HAS_NEON
+        mode = Poseidon2Mode::Neon;
 #else
         mode = Poseidon2Mode::Scalar;
 #endif
@@ -310,6 +312,8 @@ inline void Poseidon2Goldilocks<W>::compress(
     if (mode == Poseidon2Mode::Auto) {
 #if PIL2_HAS_AVX2
         mode = Poseidon2Mode::Avx;
+#elif PIL2_HAS_NEON
+        mode = Poseidon2Mode::Neon;
 #else
         mode = Poseidon2Mode::Scalar;
 #endif
